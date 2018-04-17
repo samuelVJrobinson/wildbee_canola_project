@@ -1,0 +1,159 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head>
+	<meta http-equiv="Content-Type" content="text/html, charset=UTF-8">
+    <title>Ecological Archives E093-160-S1</title>
+	
+	<script type="text/javascript" src="http://www.esapubs.org/templates/scripts/analytics.js"></script>
+  <style type="text/css">
+body {background-color: #FFF; font-family: Times New Roman, Times, serif;}
+
+hr {
+	height: .15em;
+	color: gray;
+	background-color: gray;
+	border-width: 0;
+}
+hr.divider {
+	width: 50em;
+	margin-top: 1.7em;
+	margin-bottom: 2em;
+	margin-left: 0;
+}
+
+p {max-width: 50em;}
+
+li {max-width: 48em;}
+
+sub, sup {font-size: .7em;}
+
+table, td {
+	border: 1px solid black;
+	border-collapse: collapse;
+	text-align: center;
+    vertical-align: top;
+}
+td {max-width: 70em; padding: .1em;}
+table, tr {
+	padding: .1em;}
+tr:first-child {font-weight: bold;}
+
+table.equation {border: none; width: 48em;}
+.equation td {border: none; text-align: left; vertical-align: middle;}
+.equation tr:first-child {font-weight: normal;}
+.equation td:last-child {text-align: right; width: 3em;}
+
+table.noFormat {border: none; text-align: inherit;}
+.noFormat td {border: none; text-align: inherit;}
+.noFormat tr:first-child {font-weight: normal;}
+
+/* Position modifiers.  Use these to alter placement of elements on the page. */
+
+.center {margin-left: auto; margin-right: auto; text-align: center;}
+.textCenter {text-align: center;}
+.textLeft  {text-align:left;}
+
+.indent {margin-left: 2em;}
+p.indent {max-width: 48em;}
+p.heading.indent {max-width: 40em;}
+.halfIndent {margin-left: 1em;}
+
+/* Font modifiers.  Use these to alter font style and type. */
+
+.courier {font-family: Courier new, Courier, mono;}
+.heading {max-width: 45em; margin-top: .7em; font-size: 1.2em; font-weight: bold;}
+.overline {text-decoration: overline;}
+.over {text-decoration: overline;}
+.roman{font-style: normal; text-decoration: none; font-weight: normal;}
+.smallcaps {font-variant: small-caps;}
+
+#links {font-size: .7em; font-family: Arial, Helvetica, sans-serif;}
+</style></head>
+  <body bgcolor="#FFFFFF">
+	<p class="heading">Yann Clough. 2012. A generalized approach to modeling and estimating indirect effects in ecology. <i>Ecology</i> 93:1809–1815. <a href="http://dx.doi.org/10.1890/11-1899.1">http://dx.doi.org/10.1890/11-1899.1</a></p>
+<hr>
+    <p class="heading">Supplement</p>
+	<p class="heading indent">
+		The data as well as the R and WinBUGS code to conduct the analyses.
+		<br>
+		<i>Ecological Archives</i> E093-160-S1.
+	</p>
+    <p style="font-weight: bold;"><a href="../../../copyright.htm">Copyright</a></p>
+    <hr>
+    <p class="heading indent">
+        <a href="#authors">Authors</a><br>
+        <a href="#filelist">File list (downloads)</a><br>
+        <a href="#desc">Description</a>
+    </p>
+    <hr>
+    <p id="authors" class="heading">Author(s)</p>
+    <p class="indent">
+		Yann Clough<br>
+		Agroecology<br>
+		Department of Crop Sciences<br>
+		Georg-August-Universität Göttingen<br>
+		Grisebachstr. 6<br>
+		D-37077 Göttingen<br>
+		E-mail: <a href="mailto:yclough@gwdg.de">yclough@gwdg.de</a>
+	</p>
+    <hr>
+    <p id="filelist" class="heading">File list</p>
+    <p class="indent courier">
+		<a href="Supp1Files/code_and_data.rar">code_and_data.rar</a> (md5: 73050eb6839d36696bd85ae3fabd6c8c)<br>
+		<a href="Supp1Files/data.plot.txt">data.plot.txt</a> (md5: 0fc94d989c075f014fa0a88dcfe336c8)<br>
+		<a href="Supp1Files/data.subplot.txt">data.subplot.txt</a> (md5: 628b79084eb68ef06a577673fa809b9f)<br>
+		<a href="Supp1Files/data.tree.txt">data.tree.txt</a> (md5: 9de3ce8e00f72728a6638e9a51546602)<br>
+		<a href="Supp1Files/BUGS.mA.annotated.txt">BUGS.mA.annotated.txt</a> (md5: 396e6ff35a8f02db566be9b304dc6c3c)<br>
+		<a href="Supp1Files/BUGS.mB.annotated.txt">BUGS.mB.annotated.txt</a> (md5: c2238f71556018781c2f0b1376a0626c)<br>
+		<a href="Supp1Files/Rcode.modelA.annotated.R">Rcode.modelA.annotated.R</a> (md5: 4662b653ba1fbc26a4de371d5ec6efb4)<br>
+		<a href="Supp1Files/Rcode.modelB.annotated.R">Rcode.modelB.annotated.R</a> (md5: a4a5ab4dfe94beb29f862d4a53ae3092)<br>
+		<a href="Supp1Files/effects.modelB.annotated.R">effects.modelB.annotated.R</a> (md5: 3f87f050daafb00fa2b5c1cfeed6f7ce)<br>
+		<a href="Supp1Files/Rcode.dsep.annotated.R">Rcode.dsep.annotated.R</a> (md5: 17bb4eabeee5c84a14693a766faf8af9)<br>
+		<a href="Supp1Files/claim1_bugs.txt">claim1_bugs.txt</a> (md5: 86a38928ffe6ffc4ed942d77f560ae70)<br>
+		<a href="Supp1Files/claim2_bugs.txt">claim2_bugs.txt</a> (md5: 44654a248baee405daa95bf47bf1f323)<br>
+		<a href="Supp1Files/claim3A_bugs.txt">claim3A_bugs.txt</a> (md5: c0c6eab9e48e1c2928fe46029cc1e167)<br>
+		<a href="Supp1Files/claim3B_bugs.txt">claim3B_bugs.txt</a> (md5: a385df60ef6da65b6572cc310fc754e8)<br>
+		<a href="Supp1Files/claim4_bugs.txt">claim4_bugs.txt</a> (md5: fea7e182b32ea77eb71d7295645bfca8)<br>
+		<a href="Supp1Files/claim5_bugs.txt">claim5_bugs.txt</a> (md5: 486ea08f4ed704ccfae27e62039458b0)<br>
+		<a href="Supp1Files/claim6_bugs.txt">claim6_bugs.txt</a> (md5: 46efa7b9c905c54a9d1cd77c81f09688)<br>
+		<a href="Supp1Files/claim7A_bugs.txt">claim7A_bugs.txt</a> (md5: 8e36c5443e9a63fbf7fe52912f18dcba)<br>
+		<a href="Supp1Files/claim7B_bugs.txt">claim7B_bugs.txt</a> (md5: c4e370e2574700c2b2b20db3e985a847)<br>
+		<a href="Supp1Files/claim8A_bugs.txt">claim8A_bugs.txt</a> (md5: 25cbcbae615680c5731fa6a3ba294905)
+	</p>
+    <p id="desc" class="heading">Description</p>
+    <div class="indent">
+        <p><span class="courier">code_and_data.zip</span> is an archive containing all data and code described below (19 files).</p>
+		<p><span class="courier">data.plot.txt</span> is a text file containing data at plot scale. Column definitions are:</p>
+		<ol>
+			<li>plot: plot number, 1–43</li>
+			<li>temp: mean daily temperature in °C</li>
+			<li>age: tree age in years</li>
+		</ol>
+		<p><span class="courier">data.subplot.txt</span> is a text file containing data at plot scale. Column definitions are:</p>
+		<ol>
+			<li>subplot: subplot number, 1–86</li>
+			<li>plot: plot number, 1–43</li>
+			<li>Nfert: nitrogen fertilization, dummy variable (1 = fertilized, 0 = control)</li>
+		</ol>
+		<p><span class="courier">data.tree.txt</span> is a text file containing data at plot scale. Column definitions are:</p>
+		<ol>
+			<li>tree: tree number, 1–430</li>
+			<li>subplot: subplot number, 1–86</li>
+			<li>plot: plot number, 1–43</li>
+			<li>Pc: presence of <i>Philidris</i> cf. <i>cordata</i>, dummy variable (1 = present, 0 = absent)</li>
+			<li>Hs: number of pods with <i>Helopeltis sulawesi</i> damage</li>
+			<li>Cc: number of pods with <i>Conopomorpha cramerella</i> damage</li>
+			<li>Npodh: number of harvested cacao pods</li>
+		</ol>
+		<p>The data files <span class="courier">BUGS.mA.annotated.txt</span> and <span class="courier">BUGS.mB.annotated.txt</span> contain the BUGS code for models A and B respectively. These BUGS files, as well as the data files (files 1 to 3) have to be in the working directory of R when running the R code contained in the files <span class="courier">Rcode.modelA.annotated.R</span> and <span class="courier">Rcode.modelB.annotated.R</span>. The R package R2WinBUGS is needed as its function bugs() is called upon by the R code to run the models. The R code to compute the direct and indirect effects in model B is contained in <span class="courier">effects.modelB.annotated.R</span>. This code will only run if model B was run successfully, which causes the samples of the posterior distribution to be available in the R workspace. <span class="courier">Rcode.dsep.annotated.R</span> contains the R code to compute d-sep test for models A and B. It runs the BUGS code associated with the independence claims implied by model A and B, which is contained in the files <span class="courier">claim1_bugs.txt</span>, <span class="courier">claim2_bugs.txt</span>, <span class="courier">claim3A_bugs.txt</span>, <span class="courier">claim3B_bugs.txt</span>, <span class="courier">claim4_bugs.txt</span>, <span class="courier">claim5_bugs.txt</span>, <span class="courier">claim6_bugs.txt</span>, <span class="courier">claim7A_bugs.txt</span>, <span class="courier">claim7B_bugs.txt</span>, and <span class="courier">claim8A_bugs.txt</span>.</p>
+    <p></p>
+	</div>
+	<hr>
+    <p id="links" class="center">
+        <a href="../../../../default.htm" target="_top">ESA Publications</a> |
+		<a href="../../../default.htm" target="_top">Ecological Archives</a> |
+		<a href="../../../copyright.htm" target="_top">Permissions</a> |
+		<a href="../../../citation.htm" target="_top">Citation</a> |
+		<a href="../../../contacts.htm" target="_top">Contacts</a>
+    </p>
+
+
+</body></html>

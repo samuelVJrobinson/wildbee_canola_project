@@ -1,0 +1,15 @@
+#Model of count of A. terminalis using binomial-poisson framework
+model {  
+	#Priors
+	lambda~dgamma(0.001,0.001) #Prior for lambda
+	phi~dunif(0,1) #Prior for detection probability  
+
+	# Likelihood
+	for(i in 1:Nsite){ #For each site...
+		#Estimate true count for each site
+		trueCount[i]~dpois(lambda) #True count for each site is poisson dist.				
+		for(j in 1:Nreps){ #For each observation
+			C[i,j]~dbin(phi,trueCount[i])
+		}  		
+	}  
+}

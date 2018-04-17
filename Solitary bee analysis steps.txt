@@ -1,0 +1,70 @@
+Steps for solitary bee analysis (June 19, 2017)
+
+-------------------------------------
+
+Using traps that were in the same location both years:
+
+1) Choose bee spp.
+
+	Some have very low abundance in 1 or both years
+	Top 10 candidates, filtering out ones with large year-to-year differences
+                     Species y2015 y2016
+       Anthophora terminalis   589   346
+         Melissodes confusus   349   335
+    Lasioglossum leucozonium   146   213
+              Dufourea maura   130    62
+         Megachile perihirta    87    55
+  Lasioglossum dialictus_sp1    81    32
+         Hylaeus hylaeus_sp9    35    63
+     Anthophora occidentalis    50    29
+          Melissodes rivalis    23    50
+            Andrena peckhami    28    43
+
+
+2) Truncate data to meaningful temporal range
+
+	Surveys were done during different times of year. To compare year-to-year data, we need to use the same temporal range.
+
+	Ideas:
+	Use day of year (simplest)
+	Use GDD (harder to explain, possibly more biologically relevant)
+	Fit abundance-time curves to each site/year, and integrate over relevant ranges
+
+3) Calculate overlap in 2015
+
+	Ideas:
+	Days of overlap in canola bloom (simplest)
+	Fit curves to flower abundance, abundance, and integrate
+	Standardize canola bloom (?) or populations (?)
+	What landscape radius? (probably closest one)
+
+4) Measure population responses in 2016 (Popn2016 ~ Popn2015 * Overlap) for each spp
+	
+	Ideas:
+	Mean count per trapping effort (easy)
+	Integrate over similar period from 2016
+
+5) What else?? 
+
+	Potential things to include:
+	Other crops (e.g. sunflower, clover) or some measure of landscape flower availability (a la Jenn)?
+	Different radii (use autocorrelogram)
+	Honeybee abundance as a covariate (assumed to have a negative effect)		
+	Crops in 2014 as a predictor of 2015 population? (What do we use as the "starting" population?)
+	
+
+
+Paul's comments:
+
+Could do some kind of integral approach (as I suggested), or could do:
+
+Nbee2016 ~ Nbee2015 * Ncanola2015 + s(GDD2016) + (1|spp/site)
+
+	With this model, we would focus less on accept/reject model, but look at model coefficient b/w Nbee:NCanola
+
+
+
+Other things to remember 
+	- deployedHours must be used as an offset
+	- consider the brms package in R for STAN-based Bayesian hierarchical models
+	

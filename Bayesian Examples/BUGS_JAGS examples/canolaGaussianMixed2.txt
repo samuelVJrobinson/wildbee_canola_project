@@ -1,0 +1,31 @@
+model { #Second version of canola model, using IFELSE trick to get around estimating sigma and mu. 
+#This works OK, but is much slower and tends to drag the mean down with it
+  
+  #Priors
+  mu.canola ~ dnorm(-7,0.1) #Prior for mean    
+  sigma.canola ~ dunif(1,50) #Prior for sigma
+  resid.canola ~ dgamma(0.1,0.1) #Prior for "residual"
+  
+  sigma.mu.site ~ dunif(0,20) #SD for mean random effect
+  tau.mu.site<-pow(sigma.mu.site,-2) #Precision
+  
+  sigma.sigma.site ~ dunif(1,10) #SD for sigma random effect
+  tau.sigma.site<-pow(sigma.sigma.site,-2) #Precision
+  
+  for (i in 1:Nsite){ #For each site
+    mu.site.canola[i] ~ dnorm(mu.canola,tau.mu.site) #Deviation from mean
+	sigma.site.canola[i] ~ dnorm(sigma.canola,tau.sigma.site)  #Deviation from sigma - this might crash unless starting values are reasonable
+  }
+    
+  # Likelihood  
+  for(i in 1:N){ #For each sample...
+	
+  	#Canola bloom - gaussian shape parameter		
+	site.mean[i]<-mu.site.canola[site[i]]
+	site.sigma[i]<-sigma.site.canola[site[i]]
+	
+	pred.canola[i]<-ifelse(site[i]>0,100*exp(-0.5*((centEndDate[i]-site.mean[i])/site.sigma[i])^2),0)	
+	canolaBloom[i]~dnorm(pred.canola[i],ifelse(site[i]>0,resid.canola,100000))		
+  }  
+    
+}

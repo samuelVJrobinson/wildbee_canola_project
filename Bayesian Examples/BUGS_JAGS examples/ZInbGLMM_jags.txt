@@ -1,0 +1,54 @@
+#Model of count of A. terminalis using negative binomial GLMM framework 
+#NOTE: alternative modelling of NB using 
+#https://blog.aidanfindlater.com/2016/09/12/poisson-and-negbin-in-jags/
+#This model has a ZI-term for the site, where site count is modelled as ~0 if bernoulli term is >0.
+#Only ends up being 2 unoccupied sites, so this doesn't really improve anything
+model {
+  
+  # #Hyperpriors
+  alpha.mean ~ dnorm(0,.1)
+  alpha.sd ~ dunif(0,10)
+  alpha.prec <- 1 / (alpha.sd*alpha.sd)
+  
+  #Priors
+  # alpha ~ dnorm(0,0.001) #Prior for intercept
+  beta ~ dnorm(0,0.01) #Prior for slope  
+  theta.zero ~ dunif(0,1) #Prior for zero-inflation term
+  
+  logtheta ~ dnorm(0,0.01) #Hyperprior for dispersion parameter
+  theta <-exp(logtheta) #Transform
+    
+  for (i in 1:Nsite){
+    alpha[i] ~ dnorm(alpha.mean,alpha.prec) #Random intercept for count~centDate relationship
+	siteZero[i] ~ dbern(theta.zero) #Occupancy term for each site (is each site occupied?)
+  }
+  
+  # Likelihood  
+  for(i in 1:N){ #For each sample...
+	r[i] ~ dgamma(theta,theta) #NB dispersion parameter
+  	
+	#Bee count
+	#Model lambda[i] as linear function of centDate, using traplength as an offset	
+	log(lambda[i])<-ifelse(siteZero[site[i]]>0,log(traplength[i])+alpha[site[i]]+beta*centDate[i],-1000)
+	# log(lambda[i])<-log(traplength[i])+alpha[site[i]]+beta*centDate[i]+0.00001 #Non-ZI version
+	mustar[i]<-(lambda[i]*r[i])+0.00001	#lambda x dispersion parameter + small number to make it nonzero
+	count[i]~dpois(mustar[i]) #Model actual count
+	
+	# #Canola bloom
+	# pred.canola[i]<-nearCanola*exp(-0.5*((centDate[i]-mu.canola)/sigma.canola)^2)
+	# canolaBloom[i]~dnorm(pred.canola[i],0.5)
+	
+	
+	#Posterior predictive checks:
+	#Absolute residual
+    res[i] <- abs(count[i] - mustar[i])
+    #Generate new dataset
+    count.new[i] ~ dpois(mustar[i])
+    res.new[i] <- abs(count.new[i] - mustar[i])
+  }
+  
+  #Derived parameters for posterior predictive check
+  fit <- sum(res[])
+  fit.new <- sum(res.new[])
+  
+}

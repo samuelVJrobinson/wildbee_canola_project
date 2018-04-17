@@ -1,0 +1,35 @@
+#Pseudocode version:
+
+#Year1
+#Modelled variables
+
+	Pop.TotalYear1 ~ %SNL, family = poisson #Latent
+
+	Pop.AvailYear1 ~ Pop.TotalYear1 + Time, family = poisson #Latent
+
+	CountYear1 ~ Pop.AvailYear1 + %Landscape bloom, family = poisson 
+
+#Calculated variables
+
+	% landscape canola bloom <- %Cover canola * %Bloom canola
+
+	OverlapYear1 <- % landscape canola bloom * Pop.AvailYear1 
+	#This assumes that any population increases will feed into general pool next year, not specific time periods
+
+#Year2
+#Modelled variables
+
+	Pop.TotalYear2 ~ Pop.TotalYear1 + %SNL + OverlapYear1, family = poisson #Latent
+
+	Pop.AvailYear2 ~ Pop.TotalYear2 + Time, family = poisson #Latent
+
+	CountYear2 ~ Pop.AvailYear1 + %Landscape bloom, family = poisson 
+
+#Calculated variables
+
+	% landscape canola bloom <- %Cover canola * %Bloom canola
+
+	OverlapYear2 <- % landscape canola bloom * Pop.AvailYear1 
+	
+
+

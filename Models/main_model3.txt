@@ -1,0 +1,171 @@
+#Main model for canola-insect interaction, using NB relationship for count.
+#This model is having trouble estimating hyperparameters for canola bloom/SD, even though I'm filling in canola-free sites with NAs
+model {
+  
+  #Priors
+  
+  #Canola bloom 2015 ~ Time relationship
+  mu.canola2015 ~ dnorm(-15,0.05) #Prior for mean of bloom   
+  tau.mu.site2015 ~ dgamma(0.1,0.1) #Precision for mean of bloom (1/SD^2)
+  sigma.canola2015 ~ dgamma(1,.1) #Shape factor for generating SD of bloom
+  # sigma.sigma.site2015 ~ dgamma(1,1) #Rate for generating SD of bloom 
+  sigma.sigma.site2015 <- 0.1 #Rate for generating SD of bloom (fixed)    
+  resid.canola2015 ~ dgamma(0.1,0.1) #Precision for "Residual"  
+  
+  #Count2015 ~ Time relationship
+  intN2015.mean ~ dnorm(0,0.01) #Intercept mean
+  intN2015.prec ~ dgamma(0.1,0.1) #Precision of Intercept SD
+  slopeN2015 ~ dnorm(0,0.01) #Slope of Count-Time relationship
+  logDispN2015 ~ dnorm(0,0.01) #Dispersion parameter
+  dispN2015 <-exp(logDispN2015) # Transform disp. parameter   
+  
+  #Canola bloom 2016 ~ Time relationship
+  mu.canola2016 ~ dnorm(-10,0.05) #Prior for mean of bloom   
+  tau.mu.site2016 ~ dgamma(0.1,0.1) #Precision for mean of bloom (1/SD^2)
+  sigma.canola2016~ dgamma(1,.1) #Shape factor for generating SD of bloom
+  # sigma.sigma.site2016 ~ dgamma(1,1) #Rate for generating SD of bloom   
+  sigma.sigma.site2016 <- 0.1 #Rate for generating SD of bloom (fixed)  
+  resid.canola2016 ~ dgamma(0.1,0.1) #Precision for "Residual"  
+  
+  #Count2016 ~ Time relationship
+  intN2016.mean ~ dnorm(0,0.01) #Intercept mean
+  intN2016.prec ~ dgamma(0.1,0.1) #Precision of Intercept SD
+  slopeN2016 ~ dnorm(0,0.001) #Slope of Count-Time relationship
+  logDispN2016 ~ dnorm(0,0.01) #Dispersion parameter
+  dispN2016 <-exp(logDispN2016) # Transform disp. parameter  
+  
+  
+  #Year-to-year parameters
+  canola.slope ~ dnorm(0,0.01) #Slope of canola bloom on count (0 = neutral, + = repelling, - = attracting)  
+  SNL.slope ~ dnorm(0,0.01) # Slope of SNL effect on Site-level Intercept - SHOULD THIS BE THE SAME BETWEEN YEARS?  
+  overlap.slope ~ dnorm(0,0.01) #Slope of total overlap (2015) on intercept (2016) 
+  
+  #For canola-filled sites in 2015
+  for(site in 1:length(canolaSites2015)){
+	#Canola bloom 2015 ~ Time
+    mu.site.canola2015[site] ~ dnorm(mu.canola2015,tau.mu.site2015) #Mean canola bloom in 2015
+	sigma.site.canola2015[site] ~ dgamma(sigma.canola2015,sigma.sigma.site2015)  #SD canola bloom in 2015		
+  }
+  
+  #For canola-filled sites in 2016
+  for(site in 1:length(canolaSites2016)){
+	#Canola bloom 2016 ~ Time
+    mu.site.canola2016[site] ~ dnorm(mu.canola2016,tau.mu.site2016) #Mean canola bloom in 2016
+	sigma.site.canola2016[site] ~ dgamma(sigma.canola2016,sigma.sigma.site2016)  #SD canola bloom in 2016
+  }
+    
+  #For all sites
+  for (site in 1:Nsite){
+  
+	#Crude integration function (works OK, slows down a lot with low intWidth values - 1 is probably OK)
+	for(day in 1:NintRange){ #For each day in integration range 
+		canolaBloomDay2015[day,site]<-ifelse(prop.canola2015[site]>0,
+			exp(-0.5*((lwrRange+(day)-mu.site.canola2015[canolaSitesIndex2015[site]])/sigma.site.canola2015[canolaSitesIndex2015[site]])^2),
+			0)*prop.canola2015[site] #Percent bloom x Proportion canola
+		totalBeesDay2015[day,site]<-intN2015.site[site]+slopeN2015*day+canolaBloomDay2015[day,site]*prop.canola2015[site]*canola.slope #Bees/day
+		overlapDay2015[site,day]<-canolaBloomDay2015[day,site]*totalBeesDay2015[day,site] #overlapDay2015<-Percent bloom x Proportion canola x Bees/day		
+	}
+	totalOverlap2015[site]<-sum(overlapDay2015[,site])	#Total overlap for each site for 2015
+	
+	#Count2015 ~ Time
+	intN2015.mu[site]<-intN2015.mean+SNL.slope*prop.SNL[site] #Intercept ~ Proportion SNL
+    intN2015.site[site] ~ dnorm(intN2015.mu[site],intN2015.prec) #Intercept in 2015	
+  
+	#Count2016 ~ Time
+	intN2016.mu[site]<-intN2015.site[site]+SNL.slope*prop.SNL[site]+totalOverlap2015[site]*overlap.slope #Intercept 2016 ~ Intercept2015 + Proportion SNL + totalOverlap2015
+    intN2016.site[site] ~ dnorm(intN2016.mu[site],intN2016.prec) #Intercept in 2016
+	
+  }
+  
+  
+  for(i in 1:N2015){ #For each sample in 2015...
+  
+	# Likelihood  
+  
+	#Canola bloom 2015 ~ Time
+	#Predicted canola ~ 100 x e^(-0.5*((Date-Mean[site])/Sigma[site])^2) (Gaussian curve)
+	pred.canola2015[i]<-ifelse(prop.canola2015[sites2015[i]]>0,
+		100*exp(-0.5*((centEndDate2015[i]-mu.site.canola2015[canolaSitesIndex2015[sites2015[i]]])/
+		sigma.site.canola2015[canolaSitesIndex2015[sites2015[i]]])^2),
+		0)
+	canolaBloom2015[i]~dnorm(pred.canola2015[i],resid.canola2015)			
+  
+	#Count2015 ~ Time
+	#Lambda ~ offset(Traplength) + Intercept[Site] + Slope*Date	
+	canola.effect2015[i]<-(pred.canola2015[i]/100)*prop.canola2015[sites2015[i]]*canola.slope #Predicted bloom of canola x Proportion of canola x Effect on Count
+	log(lambda2015[i])<-log(traplength2015[i])+intN2015.site[sites2015[i]]+slopeN2015*centMidDate2015[i]+canola.effect2015[i]
+	r2015[i] ~ dgamma(dispN2015,dispN2015) #NB dispersion parameter
+	mustar2015[i]<-lambda2015[i]*r2015[i]
+	count2015[i]~dpois(mustar2015[i]) 		
+	
+	#Posterior predictive checks
+		
+	#Canola bloom 2015 residual
+    res.canola2015[i] <- ifelse(prop.canola2015[sites2015[i]]>0,abs(canolaBloom2015[i] - pred.canola2015[i]),0)
+    #Generate new dataset
+    new.canola2015[i] ~ dnorm(pred.canola2015[i],resid.canola2015)
+	#Deals with residuals near boundary conditions (0 & 100% bloom)
+    newRes.canola2015[i] <- ifelse(prop.canola2015[sites2015[i]]>0, #If near canola
+		abs(ifelse(new.canola2015[i]>100,100,ifelse(new.canola2015[i]<0,0,new.canola2015[i])) - pred.canola2015[i]),
+		0)		
+	#Count residual
+    res.count2015[i] <- abs(count2015[i] - mustar2015[i])
+    #Generate new count dataset
+    new.count2015[i] ~ dpois(mustar2015[i])
+    newRes.count2015[i] <- abs(new.count2015[i] - mustar2015[i])	
+  }
+  
+   for(i in 1:N2016){ #For each sample in 2016...
+  
+	# Likelihood  
+  
+	#Canola bloom 2016 ~ Time
+	#Predicted canola ~ 100 x e^(-0.5*((Date-Mean[site])/Sigma[site])^2) (Gaussian curve)
+	pred.canola2016[i]<-ifelse(prop.canola2016[sites2016[i]]>0,
+		100*exp(-0.5*((centEndDate2016[i]-mu.site.canola2016[canolaSitesIndex2016[sites2016[i]]])/
+		sigma.site.canola2016[canolaSitesIndex2016[sites2016[i]]])^2),
+		0)	
+	canolaBloom2016[i]~dnorm(pred.canola2016[i],resid.canola2016)			
+  
+	#Count2016 ~ Time
+	#Lambda ~ offset(Traplength) + Intercept[Site] + Slope*Date	
+	canola.effect2016[i]<-(pred.canola2016[i]/100)*prop.canola2016[sites2016[i]]*canola.slope #Predicted bloom of canola x Proportion of canola x Effect on Count
+	log(lambda2016[i])<-log(traplength2016[i])+intN2016.site[sites2016[i]]+slopeN2016*centMidDate2016[i]+canola.effect2016[i]
+	r2016[i] ~ dgamma(dispN2016,dispN2016) #NB dispersion parameter
+	mustar2016[i]<-lambda2016[i]*r2016[i]
+	count2016[i]~dpois(mustar2016[i]) 		
+	
+	#Posterior predictive checks
+		
+	#Canola bloom 2016 residual
+    res.canola2016[i] <- ifelse(prop.canola2016[sites2016[i]]>0,abs(canolaBloom2016[i] - pred.canola2016[i]),0)
+    #Generate new dataset
+    new.canola2016[i] ~ dnorm(pred.canola2016[i],resid.canola2016)
+	#Deals with residuals near boundary conditions (0 & 100% bloom)
+     newRes.canola2016[i] <- ifelse(prop.canola2016[sites2016[i]]>0, #If near canola
+		abs(ifelse(new.canola2016[i]>100,100,ifelse(new.canola2016[i]<0,0,new.canola2016[i])) - pred.canola2016[i]),
+		0)			
+	#Count residual
+    res.count2016[i] <- abs(count2016[i] - mustar2016[i])
+    #Generate new count dataset
+    new.count2016[i] ~ dpois(mustar2016[i])
+    newRes.count2016[i] <- abs(new.count2016[i] - mustar2016[i])
+	
+  }
+  
+  #Posterior predictive checks:
+  #Canola bloom 2015 ~ Time
+  fit.canola2015 <- sum(res.canola2015[])
+  fitNew.canola2015 <- sum(newRes.canola2015[])
+  #Count2015 ~ Time
+  fit.count2015 <- sum(res.count2015[])
+  fitNew.count2015 <- sum(newRes.count2015[])  
+  
+  #Canola bloom 2016 ~ Time
+  fit.canola2016 <- sum(res.canola2016[])
+  fitNew.canola2016 <- sum(newRes.canola2016[])
+  #Count2016 ~ Time
+  fit.count2016 <- sum(res.count2016[])
+  fitNew.count2016 <- sum(newRes.count2016[])  
+  
+}

@@ -1,0 +1,440 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head>
+	<meta http-equiv="Content-Type" content="text/html, charset=UTF-8">
+    <title>Ecological Archives E093-160-A3</title>
+	
+	<script type="text/javascript" src="http://www.esapubs.org/templates/scripts/analytics.js"></script>
+  <style type="text/css">
+body {background-color: #FFF; font-family: Times New Roman, Times, serif;}
+
+hr {
+	height: .15em;
+	color: gray;
+	background-color: gray;
+	border-width: 0;
+}
+hr.divider {
+	width: 50em;
+	margin-top: 1.7em;
+	margin-bottom: 2em;
+	margin-left: 0;
+}
+
+p {max-width: 50em;}
+
+li {max-width: 48em;}
+
+sub, sup {font-size: .7em;}
+
+table, td {
+	border: 1px solid black;
+	border-collapse: collapse;
+	text-align: center;
+    vertical-align: top;
+}
+td {max-width: 70em; padding: .1em;}
+table, tr {
+	padding: .1em;}
+tr:first-child {font-weight: bold;}
+
+table.equation {border: none; width: 48em;}
+.equation td {border: none; text-align: left; vertical-align: middle;}
+.equation tr:first-child {font-weight: normal;}
+.equation td:last-child {text-align: right; width: 3em;}
+
+table.noFormat {border: none; text-align: inherit;}
+.noFormat td {border: none; text-align: inherit;}
+.noFormat tr:first-child {font-weight: normal;}
+
+/* Position modifiers.  Use these to alter placement of elements on the page. */
+
+.center {margin-left: auto; margin-right: auto; text-align: center;}
+.textCenter {text-align: center;}
+.textLeft  {text-align:left;}
+
+.indent {margin-left: 2em;}
+p.indent {max-width: 48em;}
+p.heading.indent {max-width: 40em;}
+.halfIndent {margin-left: 1em;}
+
+/* Font modifiers.  Use these to alter font style and type. */
+
+.courier {font-family: Courier new, Courier, mono;}
+.heading {max-width: 45em; margin-top: .7em; font-size: 1.2em; font-weight: bold;}
+.overline {text-decoration: overline;}
+.over {text-decoration: overline;}
+.roman{font-style: normal; text-decoration: none; font-weight: normal;}
+.smallcaps {font-variant: small-caps;}
+
+#links {font-size: .7em; font-family: Arial, Helvetica, sans-serif;}
+</style></head>
+  <body bgcolor="#FFFFFF">
+    <p class="heading center"><i>Ecological Archives</i> E093-160-A3</p>
+	<p class="heading">Yann Clough. 2012. A generalized approach to modeling and estimating indirect effects in ecology. <i>Ecology</i> 93:1809–1815. <a href="http://dx.doi.org/10.1890/11-1899.1">http://dx.doi.org/10.1890/11-1899.1</a></p>
+    <p>
+      <span class="smallcaps">Appendix C.</span> Details of the <i>d-sep</i> procedure as applied to models A and B.
+</p>
+	<p><i>Testing the adequacy of models A and B following Shipley (2009)</i></p>
+	<p>Step 1. For each of the two models, given the graph of the model structures specified in Fig. 2, I list all pairs of variables that do not have an arrow between them. Arrows between unobserved probabilities and their observed realizations are disregarded.</p>
+	<p>Step 2. For each of these pairs I list the set of other variables in the graph that are direct causes of one or the other variables in the pair. The pair of variables along with this so-called "conditioning set" define an independence claim, and the full set of independence claims defines a "basis set". The independence claims associated with models A and B are listed in Table C1. The experimental application of nitrogen fertilizer to a randomly selected subplot means that the fertilization variable <i>Nfert</i> is orthogonal to the pot-level variables by design. These independence claims are therefore forcibly true and are not tested and do not enter the calculation of the <i>C</i> value (see below). The other acronyms are: are presence/absence of <i>P.</i> cf. <i>cordata</i> (<i>Pc</i><sub>i</sub>, 0 = absent, 1 = present), number of harvested pods (<i>Npodh</i>), number of pods damaged by <i>H. sulawesi</i> (<i>Hs</i>), number of pods damaged by <i>C. cramerella</i> (<i>Cc</i>), and the unobserved probabilities leading to the discrete outcomes in the logistic models (<i>P</i>.<i>Pc</i>, <i>P</i>.<i>Hs</i>, and <i>P</i>.<i>Cc</i>). The covariates are application of urea (<i>Nfert</i>, 0 = control, 1 = fertilized), mean annual temperature in °C (<i>temp</i>) and age in years of the cacao trees in a plot (<i>age</i>). Trivial independence claims are true given the design of the study, since nitrogen fertilization (<i>Nfert</i>) was applied to two subplots per plot, and age (<i>age</i>) and temperature (<i>temp</i>) were recorded at plot level.</p>
+	<p><span class="smallcaps">Table C1</span>. List of the independence claims (IC) associated with model A and model B.</p>
+	<table class="indent" style="width: 40em;">
+      <tbody>
+        <tr>
+          <td>
+            IC
+          </td>
+          <td>
+            Model A
+          </td>
+          <td>
+            Model B
+          </td>
+        </tr>
+        <tr>
+          <td>
+            1
+          </td>
+          <td>
+            <i>age</i>, <i>temp</i> | None
+          </td>
+          <td>
+            <i>age</i>, <i>temp</i> | None
+          </td>
+        </tr>
+        <tr>
+          <td>
+            2
+          </td>
+          <td>
+            <i>age</i>, <i>P</i>(<i>Hs</i>) | <i>Pc</i>, <i>temp</i>, <i>Nfert</i>
+          </td>
+          <td>
+            <i>age</i>, <i>P</i>(<i>Hs</i>) | <i>Pc</i>, <i>temp</i>, <i>Nfert</i>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            3
+          </td>
+          <td>
+            <b><i>age</i>, <i>P</i>(<i>Cc</i>) | <i>Pc</i>, <i>temp</i>, <i>Nfert</i></b>
+          </td>
+          <td>
+            <b><i>age</i>, <i>P</i>(<i>Cc</i>) | <i>Pc</i>, <i>temp</i>, <i>Nfert</i>, <i>Hs</i>/<i>Npodh</i></b>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            4
+          </td>
+          <td>
+            <i>age</i>, <i>Npodh</i> | <i>Nfert</i>, <i>temp</i>
+          </td>
+          <td>
+            <i>age</i>, <i>Npodh</i> | <i>Nfert</i>, <i>temp</i>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            5
+          </td>
+          <td>
+            <i>Pc</i>, <i>Npodh</i> | <i>age</i>, <i>Nfert</i>, <i>temp</i>
+          </td>
+          <td>
+            <i>Pc</i>, <i>Npodh</i> | <i>age</i>, <i>Nfert</i>, <i>temp</i>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            6
+          </td>
+          <td>
+            <i>Npodh</i>, <i>P</i>(<i>Hs</i>) | <i>Pc</i>, <i>temp</i>, <i>Nfert</i>
+          </td>
+          <td>
+            <i>Npodh</i>, <i>P</i>(<i>Hs</i>) | <i>Pc</i>, <i>temp</i>, <i>Nfert</i>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            7
+          </td>
+          <td>
+            <b><i>Npodh</i>, p(<i>Cc</i>) | <i>Pc</i>, <i>temp</i>, <i>Nfert</i></b>
+          </td>
+          <td>
+            <b><i>Npodh</i>, p(<i>Cc</i>) | <i>Pc</i>, <i>temp</i>, <i>Nfert</i>, <i>Hs</i>/<i>Npodh</i></b>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            8
+          </td>
+          <td>
+            <b><i>P</i>(<i>Hs</i>), <i>P</i>(<i>Cc</i>) | <i>Pc</i>, <i>temp</i>, <i>Nfert</i></b>
+          </td>
+          <td></td>
+        </tr>
+        <tr>
+          <td rowspan="2">
+            Trivial<br>claims
+          </td>
+          <td>
+            <i>age</i>, <i>Nfert</i> | None
+          </td>
+          <td>
+            <i>age</i>, <i>Nfert</i> | None
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <i>temp</i>, <i>Nfert</i> | None
+          </td>
+          <td>
+            <i>temp</i>, <i>Nfert</i> | None
+          </td>
+        </tr>
+      </tbody>
+    </table>
+	<br>
+	<p>Step 3. For each independence claim I formulate a (univariate) model with one of the variables in the pair as a response, and the second variable in the pair, together with all variables of the conditioning set, as explanatory variables. I fit the models using WinBUGS and obtain the posterior distribution of the slope of the partial regression of the first variable in the pair on the second variable in the pair. I then calculate the largest Bayesian credible interval that can be obtained around the median of the posterior without including zero. This is my approximation for the probability that the pair of variables is statistically independent conditional on the "conditioning set". The models are detailed below, the results are listed in Table C2.</p>
+	<p>Model 1 (slope to test is β<sub>age_temp </sub>)</p>
+	<p class="indent">
+		<i>temp</i><sub>k</sub> ~ Normal(α<sub>temp.hat k</sub>, σ<sub>temp </sub>)<br>
+		α<sub>temp.hark</sub> = α<sub>Pc</sub> + β<sub>age_temp</sub> · <i>age</i><sub>k</sub>
+	</p>
+	<p>Model 2 (slope to test is β<sub>age_Hs </sub>)</p>
+	<p class="indent">
+		<i>Hs</i><sub>i</sub> ~ Binomial(<i>P</i>.<i>Hs</i><sub>i</sub>, <i>Npodh</i><sub>i </sub>)<br>
+		logit(<i>P</i>.<i>Hs</i><sub>i </sub>) = α<sub>HS j</sub> + β<sub>Pc_Hs</sub> · <i>Pc</i><sub>i</sub> + ε<sub>Hs</sub> with ε<sub>Hs</sub> ~ Normal(0, σ<sub>Hs </sub>)<br>
+		α<sub>Hs j</sub> ~ Normal(α<sub>Hs.hat j</sub>, σ<sub>Hs.subplot </sub>)<br>
+		α<sub>Hs.hat j</sub> = α<sub>Hs k</sub> + β<sub>Nfert_Hs</sub> · <i>Nfert</i><sub>j</sub><br>
+		α<sub>Hs k</sub> ~ Normal(α<sub>Hs.hat k</sub>, σ<sub>Hs.plot </sub>)<br>
+		α<sub>Hs.hat k</sub> = α<sub>Hs</sub> + β<sub>temp_Hs</sub> · <i>temp</i><sub>k</sub> + β<sub>age_Hs</sub> · <i>age</i><sub>k</sub><br>
+	</p>
+	<p>Model 3A (slope to test is β<sub>age_Cc </sub>)</p>
+	<p class="indent">
+		<i>Cc</i><sub>i</sub> ~ Binomial(<i>P</i>.<i>Cc</i><sub>i</sub>, <i>Npodh</i><sub>i </sub>)<br>
+		logit(<i>P</i>.Cc<sub>i </sub>) = α<sub>Cc j</sub> + β<sub>Pc_Cc</sub> · <i>Pc</i><sub>i</sub> + ε<sub>Cc</sub> ~ Normal(0, σ<sub>Cc </sub>)<br>
+		α<sub>Cc j</sub> ~ Normal(α<sub>Cc.hat j</sub>, σ<sub>Cc.subplot </sub>)<br>
+		α<sub>Cc.hat j</sub> = α<sub>Cc k</sub> + β<sub>Nfert_Cc</sub> · <i>Nfert</i><sub>j</sub><br>
+		α<sub>Cc k</sub> ~ Normal(α<sub>Cc.hat k</sub>, σ<sub>Cc.plot </sub>)<br>
+		α<sub>Cc.hat k</sub> = α<sub>Cc</sub> +  β<sub>temp_Cc</sub> · <i>temp</i><sub>k</sub> + β<sub>age_Cc</sub> · <i>age</i><sub>k</sub>
+	</p>
+	<p>Model 3B (slope to test is β<sub>age_Cc </sub>)</p>
+	<p class="indent">
+		<i>Cc</i><sub>i</sub> ~ Binomial(<i>P</i>.<i>Cc</i><sub>i</sub>, <i>Npodh</i><sub>i </sub>)<br>
+		logit(<i>P</i>.<i>Cc</i><sub>i </sub>) = α<sub>Cc j</sub> + β<sub>Pc_Cc</sub> · <i>Pc</i><sub>i</sub> + β<sub>Hs_Cc</sub> · <i>Hs</i><sub>i</sub> / <i>Npodh</i><sub>i</sub> + ε<sub>Cc</sub> with Normal(0, σ<sub>Cc </sub>)<br>
+		α<sub>Cc j</sub> ~ Normal(α<sub>Cc.hat j</sub>, σ<sub>Cc.subplot </sub>)<br>
+		α<sub>Cc.hat j</sub> = α<sub>Cc k</sub> + β<sub>Nfert_Cc</sub> · <i>Nfert</i><sub>j</sub><br>
+		α<sub>Cc k</sub> ~ Normal(α<sub>Cc.hat k</sub>, σ<sub>Cc.plot </sub>)<br>
+		α<sub>Cc.hat k</sub> = α<sub>Cc</sub> + β<sub>temp_Cc</sub> · <i>temp</i><sub>k</sub> + β<sub>age_Cc</sub> · <i>age</i><sub>k</sub>
+	</p>
+	<p>Model 4 (slope to test is β<sub>age_Npodh </sub>)</p>
+	<p class="indent">
+		<i>Npodh</i><sub>i</sub> ~ Binomial(<i>Npodh</i>.hat<sub>i </sub>)<br>
+		log(<i>Npodh</i>.hat<sub>i </sub>) = α<sub>Npodh j</sub> + ε<sub>Npodh</sub> with ε<sub>Npodh</sub> ~ Normal(0, σ<sub>Npodh </sub>)<br>
+		α<sub>Npodh j</sub> ~ Normal(α<sub>Npodh.hat j</sub>, σ<sub>Npodh.subplot </sub>)<br>
+		α<sub>Npodh.hat j</sub> = α<sub>Npodhk</sub> + Β<sub>Nfert_Npodh</sub> · <i>Nfert</i><sub>j</sub><br>
+		α<sub>Npodh k</sub> ~ Normal(α<sub>Npodh.hat k</sub>, σ<sub>Npodh.plot </sub>)<br>
+		α<sub>Npod.hat k</sub> = α<sub>Npodh</sub> + β<sub>temp_Npodh</sub> · <i>temp</i><sub>k</sub> + β<sub>age_Npodh</sub> · <i>age</i><sub>k</sub>
+	</p>
+	<p>Model 5 (slope to test is β<sub>Npodh_Pc </sub>)</p>
+	<p class="indent">
+		<i>Pc</i><sub>i</sub> ~ Binary(<i>P</i>.<i>Pc</i><sub>i </sub>)<br>
+		logit(<i>P</i>.<i>Pc</i><sub>i </sub>) = α<sub>Pc j</sub> + β<sub>Npodh_Pc</sub> · <i>Npodh</i><sub>i</sub><br>
+		logit(<i>P</i>.<i>Pc</i><sub>i </sub>) = α<sub>Pc j</sub><br>
+		α<sub>Pc j</sub> = α<sub>Pc k</sub> + β<sub>Nfert_Pc</sub> · <i>Nfert</i><sub>j</sub><br>
+		α<sub>Pc k</sub> ~ Normal(α<sub>Pc.hat k</sub>, σ<sub>Pc.plot </sub>)<br>
+		α<sub>Pc.hat k</sub> = α<sub>Pc</sub> + β<sub>temp_Pc</sub> · <i>temp</i><sub>k</sub> + β<sub>age_Pc</sub> · <i>age</i><sub>k</sub>
+	</p>
+	<p>Model 6 (slope to test is β<sub>Npodh_Hs </sub>)</p>
+	<p class="indent">
+		<i>Hs</i><sub>i</sub> ~ Binomial(<i>P</i>.<i>Hs</i><sub>i</sub>, <i>Npodh</i><sub>i </sub>)<br>
+		logit(<i>P</i>.<i>Hs</i><sub>i </sub>) = α<sub>Hs j</sub> + β<sub>Pc_Hs</sub> · <i>Pc</i><sub>i</sub> + β<sub>Npodh_Hs</sub> · <i>Npodh</i><sub>i</sub> + ε<sub>Hs</sub> with ε<sub>Hs</sub> ~ Normal(0, σ<sub>Hs </sub>)<br>
+		α<sub>Hs j</sub> ~ Normal(α<sub>Hs.hat j</sub>, σ<sub>Hs.suplot </sub>)<br>
+		α<sub>Hs.hat j</sub> = α<sub>Hs k</sub> + β<sub>Nfert_Hs</sub> · <i>Nfert</i><sub>j</sub><br>
+		α<sub>Hs k</sub> = Normal(α<sub>Hs.hat k</sub>, σ<sub>Hs.plot </sub>)<br>
+		α<sub>Hs.hat k</sub> = α<sub>Hs</sub> + β<sub>temp_Hs</sub> · <i>temp</i><sub>k</sub>
+	</p>
+	<p>Model 7A (slope to test is β<sub>Npodh_Cc </sub>)</p>
+	<p class="indent">
+		<i>Cc</i><sub>i</sub> ~ Binomial(<i>P</i>.<i>Cc</i><sub>i</sub>, <i>Npodh</i><sub>i </sub>)<br>
+		logit(<i>P</i>.<i>Cc</i><sub>i </sub>) = α<sub>Cc j</sub> + β<sub>Pc_Cc</sub> · <i>Pc</i><sub>i</sub> + β<sub>Hs_Cc</sub> · <i>Hs</i><sub>i</sub> / <i>Npodh</i><sub>i</sub> + β<sub>Npodh_Cc</sub> · <i>Npodh</i><sub>i</sub> + ε<sub>Cc</sub> with ε<sub>Cc</sub> ~ Normal(0, σ<sub>Cc </sub>)<br>
+		α<sub>Cc j</sub> ~ Normal(α<sub>Cc.hat j</sub>, σ<sub>Cc.subplot </sub>)<br>
+		α<sub>Cc.hat j</sub> = α<sub>Cc k</sub> + β<sub>Nfert_Cc</sub> · <i>Nfert</i><sub>j</sub><br>
+		α<sub>Cc k</sub> ~ Normal(α<sub>Cc.hat k</sub>, σ<sub>Cc.plot </sub>)<br>
+		α<sub>Cc.hat k</sub> = α<sub>Cc</sub> + β<sub>temp_Cc</sub> · <i>temp</i><sub>k</sub>
+	</p>
+	<p>Model 7B (slope to test is β<sub>Npodh_Cc </sub>)</p>
+	<p class="indent">
+		<i>Cc</i><sub>i</sub> ~ Binomial(<i>P</i>.<i>Cc</i><sub>i</sub>, <i>Npodh</i><sub>i </sub>)<br>
+		logit(<i>P</i>.<i>Cc</i><sub>i </sub>) = α<sub>Cc j</sub> + β<sub>Pc_Cc</sub> · <i>Pc</i><sub>i</sub> + β<sub>Npodh_Cc</sub> · <i>Npodh</i><sub>i</sub> + ε<sub>Cc</sub> with εCc ~ Normal(0, σ<sub>Cc </sub>)<br>
+		α<sub>Cc j</sub> ~ Normal(α<sub>Cc.hat j</sub>, σ<sub>Cc.subplot </sub>)<br>
+		α<sub>Cc.hat j</sub> = α<sub>Cc k</sub> + β<sub>Nfert_Cc</sub> · <i>Nfert</i><sub>j</sub><br>
+		α<sub>Cc k</sub> ~ Normal(α<sub>Cc.hat k</sub>, σ<sub>Cc.plot </sub>)<br>
+		α<sub>Cc.hat k</sub> = α<sub>Cc</sub> + β<sub>temp_Cc</sub> · <i>temp</i><sub>k</sub>
+	</p>
+	<p>Model 8A (slope to test is β<sub>Hs_Cc </sub>)</p>
+	<p class="indent">
+		<i>Cc</i><sub>i</sub> ~ Binomial(<i>P</i>.<i>Cc</i><sub>i</sub>, <i>Npodh</i><sub>i </sub>)<br>
+		logit(<i>P</i>.<i>Cc</i><sub>i</sub>) = α<sub>Cc j</sub> + β<sub>Pc_Cc</sub> · <i>Pc</i><sub>i</sub> + β<sub>Hs_Cc</sub> · <i>Hs</i><sub>i</sub> / <i>Npodh</i><sub>i</sub> + ε<sub>Cc</sub> with ε<sub>Cc</sub> ~ Normal(0, σ<sub>Cc </sub>)<br>
+		α<sub>Cc j</sub> ~ Normal(α<sub>Cc.hat j</sub>, σ<sub>Cc.subplot </sub>)<br>
+		α<sub>Cc.hat j</sub> = α<sub>Cc k</sub> + β<sub>Nfert_Cc</sub> · <i>Nfert</i><sub>j</sub><br>
+		α<sub>Cc k</sub> ~ Normal(α<sub>Cc.hat k</sub>, σ<sub>Cc.plot </sub>)<br>
+		α<sub>Cc.hat k</sub> = α<sub>Cc</sub> + β<sub>temp_Cc</sub> · <i>temp</i><sub>k</sub>
+	</p>
+	
+	<p>Step 4. The probabilities calculated above are combined by computing the <i>C</i> value and comparing it to a chi-squared distribution with 2<i>k</i> degrees of freedom, where <i>k</i> is the number of claims tested. The path model is rejected if the <i>C</i> value is unlikely to have occurred by chance. The results are listed in Table C2. The very significant <i>P</i> value for path model A suggests that this model is not adequate. The non-significant <i>P</i> value for path model A suggests that this model is adequate.</p>
+	<p>TABLE C2. List of the <i>P</i> values associated with the models corresponding to each of the independence claims and overall path model test following Shipley (2009). The abbreviation <i>k</i> indicates the number of non-trivial independence claims, <i>C</i> is Shipley's test statistic, <i>P</i> is the associated <i>P</i> value, and df indicates the degrees of freedom for the latter.</p>
+	<table class="indent" style="width: 25em;">
+      <tbody>
+        <tr>
+          <td>
+            Independence claim
+          </td>
+          <td>
+            Model A
+          </td>
+          <td>
+            Model B
+          </td>
+        </tr>
+        <tr>
+          <td>
+            1
+          </td>
+          <td>
+            0.471
+          </td>
+          <td>
+            0.471
+          </td>
+        </tr>
+        <tr>
+          <td>
+            2
+          </td>
+          <td>
+            0.174
+          </td>
+          <td>
+            0.174
+          </td>
+        </tr>
+        <tr>
+          <td>
+            3
+          </td>
+          <td>
+            0.944
+          </td>
+          <td>
+            0.184
+          </td>
+        </tr>
+        <tr>
+          <td>
+            4
+          </td>
+          <td>
+            0.415
+          </td>
+          <td>
+            0.415
+          </td>
+        </tr>
+        <tr>
+          <td>
+            5
+          </td>
+          <td>
+            0.383
+          </td>
+          <td>
+            0.383
+          </td>
+        </tr>
+        <tr>
+          <td>
+            6
+          </td>
+          <td>
+            0.906
+          </td>
+          <td>
+            0.906
+          </td>
+        </tr>
+        <tr>
+          <td>
+            7
+          </td>
+          <td>
+            0.792
+          </td>
+          <td>
+            0.832
+          </td>
+        </tr>
+        <tr>
+          <td>
+            8
+          </td>
+          <td>
+            &lt; 0.0001
+          </td>
+          <td>
+            -
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <b>Path model test</b>
+          </td>
+          <td colspan="2"></td>
+        </tr>
+        <tr>
+          <td>
+            <i>k</i>
+          </td>
+          <td>
+            8
+          </td>
+          <td>
+            7
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <i>C</i>
+          </td>
+          <td>
+            50.907
+          </td>
+          <td>
+            12.636
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <i>P</i>(χ<sup>2</sup><sub>df = 2<i>k</i> </sub>)
+          </td>
+          <td>
+            &lt; 0.0001
+          </td>
+          <td>
+            0.555
+          </td>
+        </tr>
+      </tbody>
+    </table>
+	<br>
+	<p class="smallcaps">Literature Cited</p>
+	<p>Shipley, B. 2009. Confirmatory path analysis in a generalized multilevel context. Ecology 90:363–368.</p>
+    <hr>
+    <p class="center">[<a href="default.htm" target="_top">Back to E093-160</a>]</p>
+  
+
+</body></html>

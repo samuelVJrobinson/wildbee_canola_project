@@ -1,0 +1,54 @@
+model { #First version of canola model, where zero-canola sites have NA for canolaBloom
+  
+  #Priors
+  
+  #Mean of canola bloom
+  mu.canola ~ dnorm(-12,0.01) #Prior for mean 
+  sigma.mu.site ~ dgamma(1,0.5) #SD for mean random effect
+  tau.mu.site<-pow(sigma.mu.site,-2) #Precision
+  
+  #"Residual"
+  resid.canola ~ dgamma(0.1,0.1) 
+  
+  #Spread of canola bloom  
+  sigma.canola ~ dgamma(3,0.1) #Shape factor
+  sigma.sigma.site ~ dgamma(3,1) #Rate 
+  # sigma.sigma.site <- 0.1 #Rate 
+       
+  for (i in 1:Nsite){ #For each site
+    mu.site.canola[i] ~ dnorm(mu.canola,tau.mu.site) #Mean bloom
+	sigma.site.canola[i] ~ dgamma(sigma.canola,sigma.sigma.site)  #SD of bloom	
+	
+	#Crude integration function (works OK for now, slows down a lot with low intWidth values - 1 is probably OK)
+	for(j in 1:NintRange){ #For each point in integration range 
+		totalCanolaDay[j,i]<-ifelse(nearCanola[i]>0,(exp(-0.5*((lwrRange+(intWidth*j)-site.mean[i])/site.sigma[i])^2))*intWidth,0)		
+	}
+	totalCanola[i]<-sum(totalCanolaDay[,i])/NintRange
+  }
+    
+  # Likelihood  
+  for(i in 1:N){ #For each sample...
+	
+  	#Canola bloom - gaussian shape parameter		
+	site.mean[i]<-mu.site.canola[site[i]]
+	site.sigma[i]<-sigma.site.canola[site[i]]
+	
+	pred.canola[i]<-100*exp(-0.5*((centEndDate[i]-site.mean[i])/site.sigma[i])^2)
+	canolaBloom[i]~dnorm(pred.canola[i],resid.canola)			
+	
+	#Posterior predictive checks
+	#Absolute residual
+    res[i] <- ifelse(nearCanola[site[i]]>0,abs(canolaBloom[i] - pred.canola[i]),0)
+    #Generate new dataset
+    canolaBloom.new[i] ~ dnorm(pred.canola[i],resid.canola)
+	#Deals with residuals near boundary conditions (0 & 100% bloom)
+    res.new[i] <- ifelse(nearCanola[site[i]]>0,
+		abs(ifelse(canolaBloom.new[i]>100,100,ifelse(canolaBloom.new[i]<0,0,canolaBloom.new[i])) - pred.canola[i]),
+		0)	
+  }  
+  
+#Derived parameters for posterior predictive check
+  fit <- sum(res[])
+  fit.new <- sum(res.new[])  
+    
+}

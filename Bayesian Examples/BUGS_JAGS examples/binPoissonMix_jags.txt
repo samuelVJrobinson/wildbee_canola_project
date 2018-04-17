@@ -1,0 +1,26 @@
+#Model of count of A. terminalis using binomial-poisson framework
+model {  
+	#Priors
+	#lambda~dgamma(0.1,0.1) #Prior for lambda
+	phi~dunif(0,0.2) #Prior for detection probability  	
+	alpha.1 ~ dnorm(-1,0.01) #Prior for change in popn. over time
+	theta.zero ~ dunif(0,1)
+	
+	#Hyperpriors for random effects
+	alpha.mean ~ dnorm(0,0.01)
+	alpha.prec ~ dunif(0.001,2)	
+  
+	for(i in 1:Nsite){ #For each site
+		#Estimate intercept for each site
+		#trueCount[i]~dpois(lambda) #True count for each site is poisson dist.								
+		alpha.0[i] ~ dnorm(alpha.mean,alpha.prec) #Intercept for each site
+		siteZero[i] ~ dbern(theta.zero)
+	}		
+		
+	for(i in 1:N){ #For each observation
+		log(lambda[i])<-siteZero[site[i]]*(alpha.0[site[i]]+alpha.1*centDate[i])+0.00001 #Model for popn. decline ()
+		trueCount[i]~dpois(lambda[i]) #True count at each site & time is poisson distr.		
+		count[i]~dbin(phi*traplength[i],trueCount[i]) #Observation-level
+		
+	}  	
+}

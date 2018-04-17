@@ -1,0 +1,42 @@
+model { #Third version of canola model, treating mu and sigma as fixed effects (no hyperprior). Requires some tricky programming
+  
+  #Priors
+  mu.canola ~ dmnorm(muField,precMuField) #Prior for mean bloom of each canola-adjacent site
+  
+  # log.sigma.canola ~ dmnorm(sigmaField,precSigmaField) #Prior for spread of bloom of each canola-adjacent site
+  # sigma.canola <-pow(log.sigma.canola,-2) #Transforms to sigma (all >0)    
+  
+  for(i in 1:8){	
+	sigma.canola[i] ~ dgamma(sigmaField,precSigmaField) #Diffuse 
+  }
+  
+  resid.canola ~ dgamma(0.1,0.1) #Prior for "residual"
+   
+  # Likelihood  
+  for(i in 1:N){ #For each sample...
+  
+  
+	
+  	pred.canola[i]<-ifelse(whichNearCanola[site[i]]>1, #If sample taken from site near canola
+		100*exp(-0.5*((centEndDate[i]-mu.canola[whichNearCanola[site[i]]])/sigma.canola[whichNearCanola[site[i]]])^2),		
+		0)	
+	canolaBloom[i]~dnorm(pred.canola[i],ifelse(whichNearCanola[site[i]]>0,resid.canola,1000))		
+	
+	
+	#Posterior predictive checks
+	#Absolute residual
+    res[i] <- ifelse(whichNearCanola[site[i]]>1,abs(canolaBloom[i] - pred.canola[i]),0)
+    #Generate new dataset
+    canolaBloom.new[i] ~ dnorm(pred.canola[i],resid.canola)
+	#Deals with residuals near boundary conditions (0 & 100% bloom)
+    res.new[i] <- ifelse(whichNearCanola[site[i]]>1,
+		abs(ifelse(canolaBloom.new[i]>100,100,ifelse(canolaBloom.new[i]<0,0,canolaBloom.new[i])) - pred.canola[i]),
+		0)	
+
+  }  
+  
+  #Derived parameters for posterior predictive check
+  fit <- sum(res[])
+  fit.new <- sum(res.new[])  
+    
+}

@@ -1,0 +1,85 @@
+model{
+
+	for (i in 1:n.tree){
+   	
+
+		Cc[i] ~ dbin(p.bound.Cc1[i],new.Npodh[i])
+		# code to ensure model runs when Npodh=0   
+		new.Npodh[i]<-Npodh[i]+equals(0,Npodh[i])
+		p.bound.Cc1[i]<-p.bound.Cc2[i]*(1-equals(0, Npodh[i]))
+		p.bound.Cc2[i]<- max(0, min(1, p.Cc[i]))		
+		logit(p.Cc[i])<- a.Cc.subplot[subplot[i]]+b.Pc_Cc*Pc[i]+b.Npodh_Cc*Npodh[i]+eps.Cc[i]
+		eps.Cc[i]~dnorm(0,tau.eps.Cc)
+
+		logit(p.Cc.fr[i])<- a.Cc.subplot.fr[subplot[i]]+b.Pc_Cc*Pc[i]
+				
+	}
+
+
+	for (j in 1:n.subplot){
+				
+	
+		a.Cc.subplot[j]~dnorm(a.Cc.subplot.hat[j],tau.Cc.subplot)
+		a.Cc.subplot.hat[j]<-a.Cc.plot[plot[j]]+b.Nfert_Cc*Nfert[j]
+		a.Cc.subplot.fr[j]<-a.Cc.plot.hat[plot[j]]+b.Nfert_Cc*Nfert[j]
+  	}							
+
+
+	for (k in 1:n.plot){
+
+	
+		a.Cc.plot[k]~dnorm(a.Cc.plot.hat[k],tau.Cc.plot)
+		a.Cc.plot.hat[k]<-a.Cc+b.temp_Cc*temp[k]
+	}
+
+
+
+	# Specification of the absolute residuals and simulated predictive values
+
+
+	for (i in 1:n.tree){
+
+
+		Cc.res[i]<-abs(Cc[i]-p.bound.Cc1[i]*new.Npodh[i])
+		Cc.rep[i]~dbin(p.bound.Cc1[i],new.Npodh[i])
+		Cc.res.rep[i]<-abs(Cc.rep[i]-p.bound.Cc1[i]*Npodh[i])
+
+		
+
+	}
+
+
+
+	# Calculation of the discrepancies observed and simulated
+
+
+
+	fit.Cc<-sum(Cc.res[])
+	fit.Cc.rep<-sum(Cc.res.rep[])
+
+
+
+	# Specification of the priors
+
+
+
+	tau.eps.Cc<-1/sigma2.eps.Cc
+	sigma2.eps.Cc<-pow(sigma.eps.Cc,2)
+	sigma.eps.Cc ~ dunif(0, 100)
+
+	b.Pc_Cc~dnorm(0,1.0E-6)
+	b.Npodh_Cc~dnorm(0,1.0E-6)
+
+	b.Nfert_Cc~dnorm(0,1.0E-6)
+	tau.Cc.subplot<-1/sigma2.Cc.subplot
+	sigma2.Cc.subplot<-pow(sigma.Cc.subplot,1)
+	sigma.Cc.subplot ~ dunif(0, 100) 
+	
+	a.Cc~dnorm(0,1.0E-6)
+	b.temp_Cc~dnorm(0,1.0E-6)
+	tau.Cc.plot<-1/sigma2.Cc.plot
+	sigma2.Cc.plot<-pow(sigma.Cc.plot,2)
+	sigma.Cc.plot ~ dunif(0, 100)
+
+
+}

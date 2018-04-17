@@ -1,0 +1,15 @@
+model{ #Testing that temperature is unrelated to plot age
+
+for (i in 1:n.plot){
+	
+	temp[i]~dnorm(temp.hat[i],tau)
+	temp.hat[i]<-a.temp+b.age_temp*age[i]
+
+	}
+
+tau<-1/sigma2
+sigma2<-pow(sigma,2)
+sigma ~ dunif(0, 100) 
+a.temp~dnorm(0,1.0E-6)
+b.age_temp~dnorm(0,1.0E-6)
+}

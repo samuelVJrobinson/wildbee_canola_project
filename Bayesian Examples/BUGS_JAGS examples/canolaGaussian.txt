@@ -1,0 +1,27 @@
+model {
+  
+  #Priors
+  mu.canola ~ dnorm(0,0.01) #Prior for mean    
+  sigma.canola ~ dunif(1,50) #Prior for sigma
+  resid.canola ~ dgamma(0.1,0.1) #Prior for "residual"
+    
+  # Likelihood  
+  for(i in 1:N){ #For each sample...
+	
+  	#Canola bloom - gaussian shape parameter
+	pred.canola[i]<-100*exp(-0.5*((centEndDate[i]-mu.canola)/sigma.canola)^2)
+	canolaBloom[i]~dnorm(pred.canola[i],resid.canola)	
+	
+	# #Posterior predictive checks:
+	# #Absolute residual
+    # res[i] <- abs(count[i] - mustar[i])
+    # #Generate new dataset
+    # count.new[i] ~ dpois(mustar[i])
+    # res.new[i] <- abs(count.new[i] - mustar[i])
+  }
+  
+  # #Derived parameters for posterior predictive check
+  # fit <- sum(res[])
+  # fit.new <- sum(res.new[])
+  
+}

@@ -1,0 +1,14 @@
+
+model {
+# Priors
+lambda ~ dgamma(0.001, 0.001)
+p ~ dunif(0, 1)
+# Likelihood
+for (i in 1:M) {
+N[i] ~ dpois(lambda)      # State model
+for (j in 1:J) {
+C[i,j] ~ dbin(p, N[i]) # Observation model
+}
+}
+}
+

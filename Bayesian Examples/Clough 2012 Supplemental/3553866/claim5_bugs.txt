@@ -1,0 +1,84 @@
+model {
+
+	# Specification of the model
+
+
+	for (i in 1:n.tree){
+   	
+		Npodh[i]~dpois(Npodh.hat.bound[i])
+		Npodh.hat.bound[i]<-max(Npodh.hat[i],0.00001)
+		Npodh.hat[i]<-exp(a.Npodh.subplot[subplot[i]]+b.Pc_Npodh*Pc[i]+eps.Npodh[i])
+		eps.Npodh[i]~dnorm(0,tau.eps.Npodh)
+
+		Npodh.fr[i]<-exp(a.Npodh.subplot.fr[subplot[i]]+b.Pc_Npodh*Pc[i])
+
+				
+	}
+
+
+	for (j in 1:n.subplot){
+				
+		a.Npodh.subplot[j]~dnorm(a.Npodh.subplot.hat[j],tau.Npodh.subplot)           
+		a.Npodh.subplot.hat[j]<-a.Npodh.plot[plot[j]]+b.Nfert_Npodh*Nfert[j]
+		a.Npodh.subplot.fr[j]<-a.Npodh.plot.hat[plot[j]]+b.Nfert_Npodh*Nfert[j]
+		
+
+  	}							
+
+
+	for (k in 1:n.plot){
+
+		a.Npodh.plot[k]~dnorm(a.Npodh.plot.hat[k],tau.Npodh.plot) 
+		a.Npodh.plot.hat[k]<-a.Npodh+b.temp_Npodh*temp[k]+b.age_Npodh*age[k]
+
+	}
+
+
+
+	# Specification of the absolute residuals and simulated predictive values
+
+
+	for (i in 1:n.tree){
+
+		Npodh.res[i]<-abs(Npodh[i]-Npodh.hat.bound[i])
+		Npodh.rep[i]~dpois(Npodh.hat.bound[i])
+		Npodh.res.rep[i]<-abs(Npodh.rep[i]-Npodh.hat.bound[i])
+		
+
+	}
+
+
+
+	# Calculation of the discrepancies observed and simulated
+
+	fit.Npodh<-sum(Npodh.res[])
+	fit.Npodh.rep<-sum(Npodh.res.rep[])
+
+
+
+	# Specification of the priors
+
+	b.Pc_Npodh~dnorm(0,1.0E-6)
+	
+	tau.eps.Npodh<-1/sigma2.eps.Npodh
+	sigma2.eps.Npodh<-pow(sigma.eps.Npodh,2)
+	sigma.eps.Npodh ~ dunif(0, 100)
+
+
+	b.Nfert_Npodh~dnorm(0,1.0E-6)
+	tau.Npodh.subplot<-1/sigma2.Npodh.subplot
+	sigma2.Npodh.subplot<-pow(sigma.Npodh.subplot,2)
+	sigma.Npodh.subplot ~ dunif(0, 100)
+	
+
+	
+	a.Npodh~dnorm(0,1.0E-6)
+	b.temp_Npodh~dnorm(0,1.0E-6)
+	b.age_Npodh~dnorm(0,1.0E-6)
+	tau.Npodh.plot<-1/sigma2.Npodh.plot
+	sigma2.Npodh.plot<-pow(sigma.Npodh.plot,2)
+	sigma.Npodh.plot ~ dunif(0, 100) 
+
+
+
+}

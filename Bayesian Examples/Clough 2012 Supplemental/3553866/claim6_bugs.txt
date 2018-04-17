@@ -1,0 +1,83 @@
+model{
+	for (i in 1:n.tree){
+   	
+
+		Hs[i] ~ dbin(p.bound.Hs1[i],new.Npodh[i])
+   		# code to ensure model runs when Npodh=0   
+		new.Npodh[i]<-Npodh[i]+equals(0,Npodh[i])		
+		p.bound.Hs1[i]<-p.bound.Hs2[i]*(1-equals(0, Npodh[i]))
+		p.bound.Hs2[i]<- max(0, min(1, p.Hs[i]))		
+		logit(p.Hs[i])<- a.Hs.subplot[subplot[i]]+b.Pc_Hs*Pc[i]+b.Npodh_Hs*Npodh[i]+eps.Hs[i]
+		eps.Hs[i]~dnorm(0,tau.eps.Hs)
+
+		logit(p.Hs.fr[i])<- a.Hs.subplot.fr[subplot[i]]+b.Pc_Hs*Pc[i]
+		
+
+				
+	}
+
+
+	for (j in 1:n.subplot){
+				
+
+		a.Hs.subplot[j]~dnorm(a.Hs.subplot.hat[j],tau.Hs.subplot)
+		a.Hs.subplot.hat[j]<-a.Hs.plot[plot[j]]+b.Nfert_Hs*Nfert[j]
+		a.Hs.subplot.fr[j]<-a.Hs.plot.hat[plot[j]]+b.Nfert_Hs*Nfert[j]
+
+  	}							
+
+
+	for (k in 1:n.plot){
+
+
+		a.Hs.plot[k]~dnorm(a.Hs.plot.hat[k],tau.Hs.plot)
+		a.Hs.plot.hat[k]<-a.Hs+b.temp_Hs*temp[k]
+
+	}
+
+
+
+	# Specification of the absolute residuals and simulated predictive values
+
+
+	for (i in 1:n.tree){
+
+	
+		Hs.res[i]<-abs(Hs[i]-p.bound.Hs1[i]*new.Npodh[i])
+		Hs.rep[i]~dbin(p.bound.Hs1[i],new.Npodh[i])
+		Hs.res.rep[i]<-abs(Hs.rep[i]-p.bound.Hs1[i]*Npodh[i])
+			
+
+	}
+
+
+
+	# Calculation of the discrepancies observed and simulated
+
+
+	fit.Hs<-sum(Hs.res[])
+	fit.Hs.rep<-sum(Hs.res.rep[])
+
+
+	# Specification of the priors
+
+
+	b.Pc_Hs~dnorm(0,1.0E-6)
+	b.Npodh_Hs~dnorm(0,1.0E-6)
+	
+	tau.eps.Hs<-1/sigma2.eps.Hs
+	sigma2.eps.Hs<-pow(sigma.eps.Hs,2)
+	sigma.eps.Hs ~ dunif(0, 100)
+	
+	b.Nfert_Hs~dnorm(0,1.0E-6)
+	tau.Hs.subplot<-1/sigma2.Hs.subplot
+	sigma2.Hs.subplot<-pow(sigma.Hs.subplot,1)
+	sigma.Hs.subplot ~ dunif(0, 100) 
+		
+	a.Hs~dnorm(0,1.0E-6)
+	b.temp_Hs~dnorm(0,1.0E-6)
+	tau.Hs.plot<-1/sigma2.Hs.plot
+	sigma2.Hs.plot<-pow(sigma.Hs.plot,2)
+	sigma.Hs.plot ~ dunif(0, 100)
+
+}
