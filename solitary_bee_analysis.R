@@ -19,7 +19,6 @@ prestheme=theme(legend.position='right',
 theme_set(theme_bw()+prestheme) #Sets graph theme to B/Ws + prestheme
 rm(prestheme)
 
-setwd('~/Projects/UofC/Wild bee time project')
 #load('arthropod.Rdata') #Has 793 more records; not sure why... 
 load('arthropodJoinLandscape.Rdata')
 load('trap.Rdata')
@@ -84,7 +83,6 @@ text2perc<-function(intext){
   return(mean(unlist(intext)))
 }
 
-#FIX THIS, SO THAT BOTH DATA FRAMES CAN BE MERGED
 #Fixes all the measurements of canola bloom %
 temp2015=trap %>%
   filter(year==2015) %>%
@@ -156,24 +154,49 @@ landscape=landscape %>%
   unite(class,class,radius) %>%
   spread(class,proportion)
 
-# #Checking to make sure that traps with 0% canola recorded actually had 0% canola around them
-# #Answer: not really. There are occasional fields that have canola near them but the bloom wasn't recorded. Probably should do some kind of overall estimate, or random effect.
-# landscape %>%
-#   select(-contains('Pasture')) %>%
-#   select(-contains('Seminatural')) %>%
-#   unite(siteYear,BLID:year) %>%
-#   left_join(select(trap,BLID,year,canolaBloom) %>%
-#               unite(siteYear,BLID:year) %>%
-#               group_by(siteYear) %>%
-#               summarize(sumPercBloom=as.numeric(sum(canolaBloom,na.rm=T)>0)),by='siteYear') %>%
-#   gather('Radius','Measured',contains('Canola')) %>%
-#   mutate(Radius=paste('Radius',gsub('Canola_','',Radius),'m')) %>% 
-#   separate(siteYear,c('site','year'),sep='_') %>% 
-#   ggplot(aes(Measured,sumPercBloom,col=year))+geom_point(position=position_jitter(width=0.01,height=0.01))+facet_wrap(~Radius,ncol=1)+
-#   geom_smooth(method='glm',method.args=list(family='binomial'))+
-#   labs(y='%Bloom Measured?',x='Actual amount of canola in landscape')
-# 
+#Checking to make sure that traps with 0% canola recorded actually had 0% canola around them
+#Answer: not really. There are occasional fields that have canola near them but the bloom wasn't recorded. Probably should do some kind of overall estimate, or random effect.
+landscape %>%
+  select(-contains('Pasture')) %>%
+  select(-contains('Seminatural')) %>%
+  unite(siteYear,BLID:year) %>%
+  left_join(select(trap,BLID,year,canolaBloom) %>%
+              unite(siteYear,BLID:year) %>%
+              group_by(siteYear) %>%
+              summarize(sumPercBloom=as.numeric(sum(canolaBloom,na.rm=T)>0)),by='siteYear') %>%
+  gather('Radius','Measured',contains('Canola')) %>%
+  mutate(Radius=paste('Radius',gsub('Canola_','',Radius),'m')) %>%
+  separate(siteYear,c('site','year'),sep='_') %>%
+  ggplot(aes(Measured,sumPercBloom,col=year))+geom_point(position=position_jitter(width=0.01,height=0.01))+facet_wrap(~Radius,ncol=1)+
+  geom_smooth(method='glm',method.args=list(family='binomial'))+
+  labs(y='%Bloom Measured?',x='Actual amount of canola in landscape')
 
+
+#Canola abundance with pass. Looks like bloom may have been missed at:
+#12000, 12754, 14025, 15208, 20001 in 2015 - first observation only
+#10781, 2nd obs?
+#14376 in 2016 - 1st and 3rd obs.
+ggplot(trap,aes(midDate,canolaBloom,col=factor(year)))+
+  geom_line()+geom_point()+
+  facet_wrap(~BLID)+
+  scale_colour_manual(values=c('red','blue'))+labs(col='Year')+
+  theme(axis.text=element_text(size=7),strip.text=element_text(size=10))
+
+#Sets "suspicious" 0 bloom values to NA
+trap[trap$BLID==12000 & trap$year==2015 & trap$pass==1,'canolaBloom'] <- NA
+trap[trap$BLID==12754 & trap$year==2015 & trap$pass==1,'canolaBloom'] <- NA
+trap[trap$BLID==14025 & trap$year==2015 & trap$pass==1,'canolaBloom'] <- NA
+trap[trap$BLID==15208 & trap$year==2015 & trap$pass==1,'canolaBloom'] <- NA
+trap[trap$BLID==20001 & trap$year==2015 & trap$pass==1,'canolaBloom'] <- NA
+trap[trap$BLID==10781 & trap$year==2015 & trap$pass==2,'canolaBloom'] <- NA
+trap[trap$BLID==14376 & trap$year==2016 & (trap$pass==1|trap$pass==3),'canolaBloom'] <- NA
+
+#Looks better
+# ggplot(trap,aes(midDate,canolaBloom,col=factor(year)))+
+#   geom_line()+geom_point()+
+#   facet_wrap(~BLID)+
+#   scale_colour_manual(values=c('red','blue'))+labs(col='Year')+
+#   theme(axis.text=element_text(size=7),strip.text=element_text(size=10))
 
 
 # Basic abundance plots ---------------------------------------------------
@@ -240,15 +263,12 @@ landscape %>%
   geom_abline(intercept=0,slope=1,linetype='dashed')+labs(y='2016',x='2015')+
   theme(axis.text=element_text(size=10))
 
-#Canola abundance with pass
-ggplot(trap,aes(midDate,canolaBloom,col=factor(year)))+geom_line()+facet_wrap(~BLID)+
-  scale_colour_manual(values=c('red','blue'))+labs(col='Year')+
-  theme(axis.text=element_text(size=7),strip.text=element_text(size=10))
 
 trap %>% #canolaBloom on centered endDate
   filter(BLID %in% unique(trap$BLID)[with(trap,tapply(canolaBloom,BLID,mean,na.rm=T))>0]) %>%
   ggplot(aes(endDate-206,canolaBloom,group=BLID))+geom_line()+facet_wrap(~year)+
-  theme(axis.text=element_text(size=7),strip.text=element_text(size=10))
+  theme(axis.text=element_text(size=7),strip.text=element_text(size=10))+
+  labs(x='Centered bloom date',y='Percent Bloom')
 
 
 
@@ -306,7 +326,7 @@ temp=group_by(top4bees,genSpp,BLID,pass,year) %>% #Abundance by date & trap
 temp %>%
   mutate(status=ifelse(count==0,'Absent','Present')) %>%
   mutate(status=factor(status,levels=c('Present','Absent'))) %>%
-  ggplot(aes(midJulian,BLID))+
+  ggplot(aes(midDate,BLID))+
   geom_point(aes(fill=status),shape=21)+
   theme(axis.text.y=element_text(size=8))+
   geom_point(aes(start,BLID,size=NULL),col='black',shape=124)+
@@ -319,8 +339,8 @@ temp %>%
 temp %>%
   mutate(status=ifelse(count==0,'Absent','Present')) %>%
   mutate(status=factor(status,levels=c('Present','Absent'))) %>%
-  ggplot(aes(midJulian,BLID))+
-  geom_point(aes(fill=status,size=(count)),shape=21)+
+  ggplot(aes(midDate,BLID))+
+  geom_point(aes(fill=status,size=(count/(end-start))),shape=21)+
   theme(axis.text.y=element_text(size=8))+
   geom_point(aes(start,BLID,size=NULL),col='black',shape=124,show.legend=F)+
   geom_point(aes(end,BLID,size=NULL),col='black',shape=124,show.legend=F)+
@@ -385,7 +405,7 @@ temp=group_by(top4bees,genSpp,BLID,pass,replicate,year) %>% #Abundance by date &
   arrange(genSpp,year,BLID,pass) %>%
   filter(year==2015,genSpp=='Anthophora terminalis')
   
-setwd("~/Projects/UofC/Wild bee time project/Bayesian Examples/BUGS_JAGS examples")
+setwd("~/Projects/UofC/wildbee_canola_project/Models")
 
 library(coda)
 library(jagsUI)
@@ -410,7 +430,7 @@ mod1=jags(data=datalist,inits=start,c('alpha.mean','alpha','beta','fit','fit.new
           n.chains=3,n.adapt=2000,n.iter=10000,n.burnin=1000,n.thin=10,parallel=T)
 
 summary(mod1)
-xyplot(mod1)
+#xyplot(mod1)
 #traceplot(mod1) # Many plots...
 densityplot(mod1)
 pp.check(mod1,'fit','fit.new') #Bad fit... actual doesn't match predicted at all
@@ -478,14 +498,14 @@ for(i in 1:nrow(res2)){ #Predictions
 
 #Overall
 ggplot(res2,aes(centDate+mean(temp$midDate),fit))+
-  geom_point(data=temp,aes(x=midDate,y=count*7/(endDate-startDate)))+
+  geom_point(data=temp,aes(x=midDate,y=count*7/(endDate-startDate)),position=position_jitter())+
   #geom_line(data=temp,aes(x=midDate,y=count,group=BLID))+
   geom_line(col='red',size=1)+geom_ribbon(aes(ymax=upr,ymin=lwr),alpha=0.3)+
   labs(x='Day of year',y='Predicted count',title='NB GLMM')+ylim(0,10)
 
 # Single-year estimation of canola bloom ----------------------------------
 
-setwd("~/Projects/UofC/Wild bee time project/Bayesian Examples/BUGS_JAGS examples")
+setwd("~/Projects/UofC/wildbee_canola_project/Models")
 
 library(coda)
 library(jagsUI)
@@ -527,6 +547,7 @@ temp=group_by(top4bees,genSpp,BLID,pass,replicate,year) %>% #Abundance by date &
   arrange(genSpp,year,BLID,pass) %>%
   filter(year==2016,genSpp=='Anthophora terminalis')
 
+# #Fixed effects: each site has mu, sigma
 # datalist=with(temp, #Data to feed into JAGS
 #               list(
 #                 N=nrow(temp), #Number of total samples
@@ -548,7 +569,7 @@ temp=group_by(top4bees,genSpp,BLID,pass,replicate,year) %>% #Abundance by date &
 # #Starting values
 # start=function() list(mu.canola=rnorm(1,0,0.01),
 #                       sigma.canola=runif(1,10,20),
-#                       resid.canola=rgamma(1,0.1,0.1)) 
+#                       resid.canola=rgamma(1,0.1,0.1))
 # mod3=jags(data=datalist,inits=start,c('mu.canola','sigma.canola','resid.canola'),
 #           model.file='canolaGaussian.txt',
 #           n.chains=3,n.adapt=500,n.iter=2000,n.burnin=500,n.thin=5,parallel=F)
@@ -577,89 +598,89 @@ temp=group_by(top4bees,genSpp,BLID,pass,replicate,year) %>% #Abundance by date &
 #   labs(x='Day of year',y='Predicted bloom')
 
 
-# #Mixed-effects: each site can have a different mu and sigma
-# 
-# datalist=with(temp, #Data to feed into JAGS
-#               list(
-#                 N=nrow(temp), #Number of total samples
-#                 Nsite=length(unique(BLID)), #Number of sites
-#                 # count=count, #Count of bees
-#                 site=as.numeric(BLID), #site index
-#                 # traplength=(endDate-startDate)/7, #offset (in weeks)
-#                 centEndDate=endDate-206, #Centered midDate 
-#                 canolaBloom=canolaBloom, #Proportion Bloom
-#                 nearCanola=as.numeric(with(temp,tapply(canolaBloom,BLID,sum,na.rm=T))>0), #Is field near canola?
-#                 lwrRange=-40, #Range of dates to integrate over
-#                 uprRange=30,
-#                 intWidth=1, #Width of rectangles to integrate across
-#                 NintRange=30-(-40)/1 #Number of rectangles
-#               )
-# )
-# #Sets all fields with zero canola to NA
-# datalist$canolaBloom[temp$BLID %in% with(temp,unique(BLID)[tapply(canolaBloom,BLID,sum)==0])]=NA
-# 
-# start=function() list(mu.canola=rnorm(1,-15,0.1),
-#                       sigma.mu.site=rgamma(1,1,0.5),
-#                       resid.canola=rgamma(1,0.1,0.1),
-#                       sigma.canola=rgamma(1,3,.1),
-#                       sigma.sigma.site=rgamma(1,3,1)
-#                       ) 
-# mod4=jags(data=datalist,
-#           inits=start,c('mu.canola','sigma.mu.site', #Overall
-#                         'resid.canola',
-#                         'sigma.canola','sigma.sigma.site',
-#                         'mu.site.canola','sigma.site.canola', #Site-level
-#                         'totalCanola',
-#                         'fit','fit.new'), #PP-checks
-#           model.file='canolaGaussianMixed.txt',
-#           n.chains=1,n.adapt=2000,n.iter=11000,n.burnin=1000,n.thin=10,parallel=F)
-# summary(mod4)
-# 
-# traceplot(mod4,parameters=c('mu.canola','sigma.mu.site', 
-#                             'resid.canola','sigma.canola','sigma.sigma.site'))
-# 
-# pp.check(mod4,'fit','fit.new') #Looks OK once residuals near boundary conditions have been dealt with
-# 
-# mod4fit=as.mcmc(mod4$samples[[1]]) #1st chain
-# 
-# #Trace of mean of canola bloom (in fields near canola)
-# plot(mod4fit[,grepl('mu.site',colnames(mod4fit))][,which(datalist$nearCanola==1)]+mod4fit[,'mu.canola'])
-# #Trace of sigma of canola bloom (in fields near canola)
-# plot(mod4fit[,grepl('sigma.site',colnames(mod4fit))][,which(datalist$nearCanola==1)]+mod4fit[,'sigma.canola'])
-# #Trace of integral of canola (in fields near canola)
-# plot(mod4fit[,grepl('totalCanola',colnames(mod4fit))][,which(datalist$nearCanola==1)])
-# 
-# round(HPDinterval(mod4fit),2)
-# 
-# mod4fit=mod4$samples[[1]] #Results from 1st chain of mod4
-# pars=apply(mod4fit,2,median)
-# pars=pars[grepl('site.canola',names(pars))] #Strips out everything except site estimates
-# pars=matrix(pars,ncol=2,dimnames=list(unique(temp$BLID),c('mu','sigma')))
-# pars=pars[which(datalist$nearCanola>0),]
-# centDate=-20:27
-# 
-# #Cheapo way of binding dataframes
-# res4=matrix(NA,length(centDate),nrow(pars),dimnames=list(centDate,rownames(pars)))
-# 
-# #Predictions
-# for(i in 1:nrow(res4)){ #For each date
-#   for(j in 1:ncol(res4)){ #For each site
-#     res4[i,j]=round(100*exp(-0.5*((centDate[i]-pars[j,1])/pars[j,2])^2),2)
-#   }
-# }
-# res4=data.frame(centDate=centDate,res4) 
-# res4=gather(res4,'BLID','fit',2:13)
-# res4$BLID=gsub('X','',res4$BLID)
-# 
-# #Looks OK
-# # ggplot(res4,aes(centDate+mean(temp$midDate),fit,group=BLID))+
-# ggplot(res4,aes(centDate,fit,group=BLID))+
-#   geom_point(data=temp,aes(x=endDate-mean(temp$midDate),y=canolaBloom,group=BLID))+
-#   #geom_line(data=temp,aes(x=endDate,y=canolaBloom,group=BLID))+
-#   geom_line(col='red',size=1)+
-#   facet_wrap(~BLID)+
-#   labs(x='Day of year',y='Percent bloom')+
-#   theme(axis.text=element_text(size=7),strip.text=element_text(size=10))
+#Mixed-effects: each site can have a different mu and sigma
+datalist=with(temp, #Data to feed into JAGS
+              list(
+                N=nrow(temp), #Number of total samples
+                Nsite=length(unique(BLID)), #Number of sites
+                # count=count, #Count of bees
+                site=as.numeric(BLID), #site index
+                # traplength=(endDate-startDate)/7, #offset (in weeks)
+                centEndDate=endDate-206, #Centered midDate
+                canolaBloom=canolaBloom, #Proportion Bloom
+                nearCanola=as.numeric(with(temp,tapply(canolaBloom,BLID,sum,na.rm=T))>0), #Is field near canola?
+                lwrRange=-40, #Range of dates to integrate over
+                uprRange=30,
+                intWidth=1, #Width of rectangles to integrate across (days)
+                NintRange=30-(-40)/1, #Number of rectangles (days)
+                BloomThresh=0.15 #Threshold value (15%), after which foragers can use canola
+              )
+)
+#Sets all fields with zero canola to NA
+datalist$canolaBloom[temp$BLID %in% with(temp,unique(BLID)[tapply(canolaBloom,BLID,sum)==0])]=NA
+
+start=function() list(mu.canola=rnorm(1,-15,0.1),
+                      sigma.mu.site=rgamma(1,1,0.5),
+                      resid.canola=rgamma(1,0.1,0.1),
+                      sigma.canola=rgamma(1,3,.1),
+                      sigma.sigma.site=rgamma(1,3,1)
+                      )
+mod4=jags(data=datalist,
+          inits=start,c('mu.canola','sigma.mu.site', #Overall
+                        'resid.canola',
+                        'sigma.canola','sigma.sigma.site',
+                        'mu.site.canola','sigma.site.canola', #Site-level
+                        'totalCanola',
+                        'fit','fit.new'), #PP-checks
+          model.file='canolaGaussianMixed.txt',
+          n.chains=1,n.adapt=2000,n.iter=23000,n.burnin=3000,n.thin=20,parallel=T)
+summary(mod4)
+
+traceplot(mod4,parameters=c('mu.canola','sigma.mu.site',
+                            'resid.canola','sigma.canola','sigma.sigma.site'))
+
+pp.check(mod4,'fit','fit.new') #Looks OK once residuals near boundary conditions have been dealt with
+
+mod4fit=as.mcmc(mod4$samples[[1]]) #1st chain
+
+#Trace of mean of canola bloom (in fields near canola)
+plot(mod4fit[,grepl('mu.site',colnames(mod4fit))][,which(datalist$nearCanola==1)]+mod4fit[,'mu.canola'])
+#Trace of sigma of canola bloom (in fields near canola)
+plot(mod4fit[,grepl('sigma.site',colnames(mod4fit))][,which(datalist$nearCanola==1)]+mod4fit[,'sigma.canola'])
+#Trace of integral of canola (in fields near canola)
+plot(mod4fit[,grepl('totalCanola',colnames(mod4fit))][,which(datalist$nearCanola==1)])
+
+round(HPDinterval(mod4fit),2)
+
+mod4fit=mod4$samples[[1]] #Results from 1st chain of mod4
+pars=apply(mod4fit,2,median)
+pars=pars[grepl('site.canola',names(pars))] #Strips out everything except site estimates
+pars=matrix(pars,ncol=2,dimnames=list(unique(temp$BLID),c('mu','sigma')))
+pars=pars[which(datalist$nearCanola>0),]
+centDate=-20:27
+
+#Cheapo way of binding dataframes
+res4=matrix(NA,length(centDate),nrow(pars),dimnames=list(centDate,rownames(pars)))
+
+#Predictions
+for(i in 1:nrow(res4)){ #For each date
+  for(j in 1:ncol(res4)){ #For each site
+    res4[i,j]=round(100*exp(-0.5*((centDate[i]-pars[j,1])/pars[j,2])^2),2)
+  }
+}
+res4=data.frame(centDate=centDate,res4)
+res4=gather(res4,'BLID','fit',2:13)
+res4$BLID=gsub('X','',res4$BLID)
+
+#Looks OK
+# ggplot(res4,aes(centDate+mean(temp$midDate),fit,group=BLID))+
+ggplot(res4,aes(centDate,fit,group=BLID))+
+  geom_point(data=temp,aes(x=endDate-mean(temp$midDate),y=canolaBloom,group=BLID))+
+  #geom_line(data=temp,aes(x=endDate,y=canolaBloom,group=BLID))+
+  geom_line(col='red',size=1)+
+  facet_wrap(~BLID)+
+  labs(x='Day of year',y='Percent bloom')+
+  theme(axis.text=element_text(size=7),strip.text=element_text(size=10))
 
 #Fixed effects: each field can have a different mu & sigma, and is estimated independently (no hyperprior)
 

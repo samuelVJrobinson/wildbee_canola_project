@@ -20,10 +20,12 @@ model { #First version of canola model, where zero-canola sites have NA for cano
 	sigma.site.canola[i] ~ dgamma(sigma.canola,sigma.sigma.site)  #SD of bloom	
 	
 	#Crude integration function (works OK for now, slows down a lot with low intWidth values - 1 is probably OK)
-	for(j in 1:NintRange){ #For each point in integration range 
+	for(j in 1:NintRange){ #For each day in integration range (70 days total)
+		#Calculate %bloom of canola on each day
 		totalCanolaDay[j,i]<-ifelse(nearCanola[i]>0,(exp(-0.5*((lwrRange+(intWidth*j)-site.mean[i])/site.sigma[i])^2))*intWidth,0)		
 	}
-	totalCanola[i]<-sum(totalCanolaDay[,i])/NintRange
+	totalCanola[i]<-sum(totalCanolaDay[,i])/NintRange #Average bloom over range of integration
+	
   }
     
   # Likelihood  
@@ -44,7 +46,7 @@ model { #First version of canola model, where zero-canola sites have NA for cano
 	#Deals with residuals near boundary conditions (0 & 100% bloom)
     res.new[i] <- ifelse(nearCanola[site[i]]>0,
 		abs(ifelse(canolaBloom.new[i]>100,100,ifelse(canolaBloom.new[i]<0,0,canolaBloom.new[i])) - pred.canola[i]),
-		0)	
+		0)		
   }  
   
 #Derived parameters for posterior predictive check
