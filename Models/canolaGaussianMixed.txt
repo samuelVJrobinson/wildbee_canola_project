@@ -17,26 +17,32 @@ model { #First version of canola model, where zero-canola sites have NA for cano
        
   for (i in 1:Nsite){ #For each site
     mu.site.canola[i] ~ dnorm(mu.canola,tau.mu.site) #Mean bloom
-	sigma.site.canola[i] ~ dgamma(sigma.canola,sigma.sigma.site)  #SD of bloom	
+	sigma.site.canola[i] ~ dgamma(sigma.canola,sigma.sigma.site)  #SD of bloom		
 	
-	#Crude integration function (works OK for now, slows down a lot with low intWidth values - 1 is probably OK)
-	for(j in 1:NintRange){ #For each day in integration range (70 days total)
-		#Calculate %bloom of canola on each day
-		totalCanolaDay[j,i]<-ifelse(nearCanola[i]>0,(exp(-0.5*((lwrRange+(intWidth*j)-site.mean[i])/site.sigma[i])^2))*intWidth,0)		
-	}
-	totalCanola[i]<-sum(totalCanolaDay[,i])/NintRange #Average bloom over range of integration
+	#Canola bloom "starts" at threshold of BloomThresh
+	#Inverse function of gaussian is:
+	#x = mu +/- sqrt(2)*sqrt(-log(y))*sigma		
 	
+	#Create "bloom start" and "bloom end" for each site
+	bloomStart[i] <- mu.site.canola[i] - sqrt(2)*sqrt(-log(BloomThresh))*sigma.site.canola[i]
+	bloomEnd[i] <- mu.site.canola[i] + sqrt(2)*sqrt(-log(BloomThresh))*sigma.site.canola[i]	
   }
     
   # Likelihood  
-  for(i in 1:N){ #For each sample...
+  for(i in 1:N){ #For each sample/pass...
 	
   	#Canola bloom - gaussian shape parameter		
-	site.mean[i]<-mu.site.canola[site[i]]
-	site.sigma[i]<-sigma.site.canola[site[i]]
+	site.mean[i]<-mu.site.canola[site[i]] #Take mean from each site
+	site.sigma[i]<-sigma.site.canola[site[i]] #Take sigma from each site
 	
+	#Predicted canola bloom (gaussian): y = 100*exp(-0.5*((x-mu)/sigma)^2)
 	pred.canola[i]<-100*exp(-0.5*((centEndDate[i]-site.mean[i])/site.sigma[i])^2)
-	canolaBloom[i]~dnorm(pred.canola[i],resid.canola)			
+	canolaBloom[i]~dnorm(pred.canola[i],resid.canola) #Residuals should be normally distributed
+	
+	#Proportion of pass that overlapped with canola bloom
+	propOverlap[i] <- max((min(centEndDate[i],bloomEnd[site[i]])-max(centStartDate[i],bloomStart[site[i]]))/(centEndDate[i]-centStartDate[i]),0)
+	
+	
 	
 	#Posterior predictive checks
 	#Absolute residual

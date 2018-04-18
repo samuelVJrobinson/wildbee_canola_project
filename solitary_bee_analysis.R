@@ -191,14 +191,6 @@ trap[trap$BLID==20001 & trap$year==2015 & trap$pass==1,'canolaBloom'] <- NA
 trap[trap$BLID==10781 & trap$year==2015 & trap$pass==2,'canolaBloom'] <- NA
 trap[trap$BLID==14376 & trap$year==2016 & (trap$pass==1|trap$pass==3),'canolaBloom'] <- NA
 
-#Looks better
-# ggplot(trap,aes(midDate,canolaBloom,col=factor(year)))+
-#   geom_line()+geom_point()+
-#   facet_wrap(~BLID)+
-#   scale_colour_manual(values=c('red','blue'))+labs(col='Year')+
-#   theme(axis.text=element_text(size=7),strip.text=element_text(size=10))
-
-
 # Basic abundance plots ---------------------------------------------------
 
 #Summary of species
@@ -365,8 +357,7 @@ mutate(top4bees,year=paste0('y',year)) %>% #Do populations in year 2015 relate t
   labs(x='Number in 2015',y='Number in 2016')
   #Weird outlier patterns...looks like 2016 was a bad year for some spp, but it might have just been because trapping was done at a different time. Should compare shortest overlapping time period.
 
-
-#Single-year model of wild bees - test using JAGS ---------------  
+# Single-year model of wild bees - test using JAGS ---------------  
 
 #Names of top4 wild spp
 top4=filter(bees,BLID %in% year2year,!agricultural)  %>%
@@ -503,6 +494,12 @@ ggplot(res2,aes(centDate+mean(temp$midDate),fit))+
   geom_line(col='red',size=1)+geom_ribbon(aes(ymax=upr,ymin=lwr),alpha=0.3)+
   labs(x='Day of year',y='Predicted count',title='NB GLMM')+ylim(0,10)
 
+#Gaussian process model - no assumptions based on time
+
+
+
+  
+
 # Single-year estimation of canola bloom ----------------------------------
 
 setwd("~/Projects/UofC/wildbee_canola_project/Models")
@@ -606,6 +603,7 @@ datalist=with(temp, #Data to feed into JAGS
                 # count=count, #Count of bees
                 site=as.numeric(BLID), #site index
                 # traplength=(endDate-startDate)/7, #offset (in weeks)
+                centStartDate=endDate-206, #Centered startDate
                 centEndDate=endDate-206, #Centered midDate
                 canolaBloom=canolaBloom, #Proportion Bloom
                 nearCanola=as.numeric(with(temp,tapply(canolaBloom,BLID,sum,na.rm=T))>0), #Is field near canola?
