@@ -76,9 +76,8 @@ model
   }
   
   # Likelihood
-  Sigma.inv <- inverse(Sigma) #Not sure why inverse is needed, but doesnt work without it
+  Sigma.inv <- inverse(Sigma) #Turns dispersion (variance) matrix into "precision" matrix
   y ~ dmnorm(Mu, Sigma.inv)
-  #y ~ dmnorm(Mu, Sigma)
 }'
   # Set up the data
   model_data = list(T = T, y = y, t = t)
@@ -94,18 +93,16 @@ model
                    n.iter=1000, # Number of iterations
                    n.burnin=200, # Number of iterations to remove at start
                    n.thin=2) # Amount of thinning
-  #Inverted
-  # mu.vect sd.vect    2.5%     25%     50%     75%   97.5%  Rhat n.eff
+    # Simulated results -------------------------------------------------------
+  
+  # Results and output of the simulated example, to include convergence checking, output plots, interpretation etc
+  print(model_run)
+  #          mu.vect sd.vect    2.5%     25%     50%     75%   97.5%  Rhat n.eff
   # alpha     -0.509   1.770  -3.838  -1.102  -0.722  -0.066   3.606 1.002  1200
   # rho        1.162   0.931   0.164   0.486   0.903   1.518   3.870 1.012   260
   # sigma      0.012   0.002   0.008   0.010   0.011   0.013   0.018 1.002  1400
   # tau        1.652   1.821   0.245   0.538   0.938   1.964   7.621 1.004   650
   # deviance -90.230   4.152 -96.096 -93.428 -90.902 -87.681 -80.791 1.001  1600
-  
-  # Simulated results -------------------------------------------------------
-  
-  # Results and output of the simulated example, to include convergence checking, output plots, interpretation etc
-  print(model_run)
   
   # Now create some predictions of new values at new times t^new
   # These are bsed on the formula:
@@ -116,39 +113,50 @@ model
   # Sigma_*[i,j] = tau^2 * exp( -rho * (t^new_i - t^new_j)^2 ) if i != j
   
   # First look at parameters
-  alpha = model_run$BUGSoutput$sims.list$alpha
-  tau = model_run$BUGSoutput$sims.list$tau
-  sigma = model_run$BUGSoutput$sims.list$sigma
-  rho = model_run$BUGSoutput$sims.list$rho
+  alpha = model_run$BUGSoutput$sims.list$alpha #Mean
+  tau = model_run$BUGSoutput$sims.list$tau #Precision
+  sigma = model_run$BUGSoutput$sims.list$sigma #Max cov
+  rho = model_run$BUGSoutput$sims.list$rho #Decay with distance
   par(mfrow = c(2,2))
-  hist(alpha, breaks=30)
-  hist(tau, breaks=30)
-  hist(sigma, breaks=30)
-  hist(rho, breaks=30)
+  hist(alpha, breaks=30, main='Mean')
+  hist(tau, breaks=30,main='Precision')
+  hist(sigma, breaks=30,main='Max cov.')
+  hist(rho, breaks=30,main='Decay with dist.')
   par(mfrow=c(1,1))
   
   # Now create predictions
-  T_new = 20
+  T_new = 21 #Number of values to get
   t_new = seq(0,1,length=T_new) #New t-values to predict along
-  Mu = rep(mean(alpha), T) #Vector of Mean values
-  Mu_new = rep(mean(alpha), T_new)
+  Mu = rep(mean(alpha), T) #Vector of original Mean values
+  Mu_new = rep(mean(alpha), T_new) #New mean values
   
-  #Covariance matrix for new and original values. Distance (OUTER) uses original t and t_new
+  #Covariance matrix for new and original values. Distance (OUTER) betwee original t and t_new
   #Doesn't add variance, as diagonal values aren't 0
   Sigma_new = median(tau)^2 * exp( -median(rho) * outer(t, t_new, '-')^2 )
+  dim(Sigma_new)
   
-  #Covariance matrix for new values. Distance uses t_new
+  #Covariance matrix for new values. Distance uses t_new (Distance between t_new values)
   Sigma_star = median(sigma)^2 * diag(T_new) + median(tau)^2 * exp( - median(rho) * outer(t_new,t_new,'-')^2 )
+  dim(Sigma_star)
   
-  #Covariance matrix for original values
+  #Covariance matrix for original values (Distance between t values)
   Sigma = median(sigma)^2 * diag(T) + median(tau)^2 * exp( - median(rho) * outer(t,t,'-')^2 )
+  dim(Sigma)
   
   #Mu_new: mean values
   #t(Sigma_new) %*% solve(Sigma, y - Mu): residuals for new t
-  #solve(Sigma, y - Mu): finds x such that cov(original,original)*x = residuals
-  #I think this is the "weight" for each point. This somehow translates variance from the original scale to the new scale.
+  #solve(Sigma, y - Mu): finds x such that cov(original)%*%x = residuals
+  #I think x is the "weight" for each point. Translates variance from the original scale to the new scale?
   
   pred_mean = Mu_new + t(Sigma_new) %*% solve(Sigma, y - Mu)
+  #Plots of components
+  par(mfrow=c(3,1)); plot(t,y-Mu,main='Residuals'); lines()
+  
+  plot(t,solve(Sigma, y - Mu),main='Weights'); 
+  plot(t_new,t(Sigma_new) %*% solve(Sigma, y - Mu),main='New effect');
+  par(mfrow=c(1,1));
+  
+  
   
   #Sigma_star: covariance matrix for new values
     # solve(Sigma, Sigma_new)
@@ -159,7 +167,7 @@ model
   points(t_new, pred_mean, col='red')
   lines(t_new, pred_mean, col='red')
   
-  pred_low = pred_mean - 1.95 * sqrt(diag(pred_var)) #Uses 1.96 rule. Ideally would use 
+  pred_low = pred_mean - 1.95 * sqrt(diag(pred_var)) #Uses 1.96 sigma rule
   pred_high = pred_mean + 1.95 * sqrt(diag(pred_var))
   lines(t_new, pred_low, col = 'red', lty = 2)
   lines(t_new, pred_high, col = 'red', lty = 2)

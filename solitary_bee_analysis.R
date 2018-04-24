@@ -19,6 +19,7 @@ prestheme=theme(legend.position='right',
 theme_set(theme_bw()+prestheme) #Sets graph theme to B/Ws + prestheme
 rm(prestheme)
 
+setwd('~/Projects/UofC/wildbee_canola_project')
 #load('arthropod.Rdata') #Has 793 more records; not sure why... 
 load('arthropodJoinLandscape.Rdata')
 load('trap.Rdata')
@@ -154,33 +155,33 @@ landscape=landscape %>%
   unite(class,class,radius) %>%
   spread(class,proportion)
 
-#Checking to make sure that traps with 0% canola recorded actually had 0% canola around them
-#Answer: not really. There are occasional fields that have canola near them but the bloom wasn't recorded. Probably should do some kind of overall estimate, or random effect.
-landscape %>%
-  select(-contains('Pasture')) %>%
-  select(-contains('Seminatural')) %>%
-  unite(siteYear,BLID:year) %>%
-  left_join(select(trap,BLID,year,canolaBloom) %>%
-              unite(siteYear,BLID:year) %>%
-              group_by(siteYear) %>%
-              summarize(sumPercBloom=as.numeric(sum(canolaBloom,na.rm=T)>0)),by='siteYear') %>%
-  gather('Radius','Measured',contains('Canola')) %>%
-  mutate(Radius=paste('Radius',gsub('Canola_','',Radius),'m')) %>%
-  separate(siteYear,c('site','year'),sep='_') %>%
-  ggplot(aes(Measured,sumPercBloom,col=year))+geom_point(position=position_jitter(width=0.01,height=0.01))+facet_wrap(~Radius,ncol=1)+
-  geom_smooth(method='glm',method.args=list(family='binomial'))+
-  labs(y='%Bloom Measured?',x='Actual amount of canola in landscape')
+# #Checking to make sure that traps with 0% canola recorded actually had 0% canola around them
+# #Answer: not really. There are occasional fields that have canola near them but the bloom wasn't recorded. Probably should do some kind of overall estimate, or random effect.
+# landscape %>%
+#   select(-contains('Pasture')) %>%
+#   select(-contains('Seminatural')) %>%
+#   unite(siteYear,BLID:year) %>%
+#   left_join(select(trap,BLID,year,canolaBloom) %>%
+#               unite(siteYear,BLID:year) %>%
+#               group_by(siteYear) %>%
+#               summarize(sumPercBloom=as.numeric(sum(canolaBloom,na.rm=T)>0)),by='siteYear') %>%
+#   gather('Radius','Measured',contains('Canola')) %>%
+#   mutate(Radius=paste('Radius',gsub('Canola_','',Radius),'m')) %>%
+#   separate(siteYear,c('site','year'),sep='_') %>%
+#   ggplot(aes(Measured,sumPercBloom,col=year))+geom_point(position=position_jitter(width=0.01,height=0.01))+facet_wrap(~Radius,ncol=1)+
+#   geom_smooth(method='glm',method.args=list(family='binomial'))+
+#   labs(y='%Bloom Measured?',x='Actual amount of canola in landscape')
 
 
-#Canola abundance with pass. Looks like bloom may have been missed at:
-#12000, 12754, 14025, 15208, 20001 in 2015 - first observation only
-#10781, 2nd obs?
-#14376 in 2016 - 1st and 3rd obs.
-ggplot(trap,aes(midDate,canolaBloom,col=factor(year)))+
-  geom_line()+geom_point()+
-  facet_wrap(~BLID)+
-  scale_colour_manual(values=c('red','blue'))+labs(col='Year')+
-  theme(axis.text=element_text(size=7),strip.text=element_text(size=10))
+# #Canola abundance with pass. Looks like bloom may have been missed at:
+# #12000, 12754, 14025, 15208, 20001 in 2015 - first observation only
+# #10781, 2nd obs?
+# #14376 in 2016 - 1st and 3rd obs.
+# ggplot(trap,aes(midDate,canolaBloom,col=factor(year)))+
+#   geom_line()+geom_point()+
+#   facet_wrap(~BLID)+
+#   scale_colour_manual(values=c('red','blue'))+labs(col='Year')+
+#   theme(axis.text=element_text(size=7),strip.text=element_text(size=10))
 
 #Sets "suspicious" 0 bloom values to NA
 trap[trap$BLID==12000 & trap$year==2015 & trap$pass==1,'canolaBloom'] <- NA
@@ -1141,140 +1142,175 @@ detach("package:jagsUI", unload=TRUE)
 
 
 
-# #Single-year model of wild bees - test using Stan ---------------
-# 
-# library("rstan")
-# rstan_options(auto_write = TRUE)
-# options(mc.cores = parallel::detectCores())
-# setwd("~/Projects/UofC/Wild bee time project/Bayesian Examples/Stan examples")
-# 
-# #Names of top4 wild spp
-# top4=filter(bees,BLID %in% year2year,!agricultural)  %>%
-#   mutate(year=paste0('y',year)) %>%
-#   group_by(year,genSpp) %>%
-#   summarize(number=n()) %>%
-#   spread(year,number,fill=0) %>%
-#   mutate(notZero=(y2015>0&y2016>0),diff=abs(y2015-y2016),total=y2015+y2016) %>%
-#   filter(notZero) %>% #Filter years with zero in one year
-#   filter((diff/total)<0.5) %>% #Filter sp where magnitude of yearly difference is less than 50% of total count
-#   arrange(desc(total)) %>%
-#   top_n(4,total) %>%
-#   .$genSpp
-# 
-# #Occurance data for top 4 bees
-# top4bees=filter(bees,BLID %in% year2year) %>%
-#   filter(genSpp %in% top4)
-# 
-# #Trapping occurance data (start and end of passes)
-# passes=trap %>%
-#   select(BLID,pass,replicate,year,startDate,midDate,endDate,canolaBloom) %>%
-#   distinct() %>%
-#   unite(ID,BLID:year,remove=F) %>%
-#   arrange(year,BLID,pass)
-# 
-# #Anthophora model from 2015 only
-# temp=group_by(top4bees,genSpp,BLID,pass,replicate,year) %>% #Abundance by date & trap
-#   summarize(count=n()) %>%
-#   unite(ID,BLID:year) %>%
-#   spread(genSpp,count) %>%
-#   full_join(passes,by='ID') %>% 
-#   gather('genSpp','count',2:5) %>%
-#   mutate(count=ifelse(is.na(count),0,count)) %>% #Changes NAs to zeros
-#   select(-ID) %>%
-#   mutate(BLID=factor(BLID)) %>%
-#   arrange(genSpp,year,BLID,pass) %>%
-#   filter(year==2015,genSpp=='Anthophora terminalis')
-# 
-# #Trying poisson GLMM with traplength offset - equivalent: count~centDate+(1|site),offset=log(week)
-# 
-# datalist=with(temp, #Data to feed into STAN
-#               list(
-#                 N=nrow(temp), #Number of total samples
-#                 Nsite=length(unique(BLID)), #Number of sites
-#                 count=count, #Count of bees
-#                 site=as.numeric(BLID), #site index
-#                 traplength=(endDate-startDate)/7, #offset (in weeks)
-#                 centDate=midDate-mean(midDate) #Centered date
-#               )
-# )
-# 
-# mod1 = stan(file = 'poissonGLMM.stan',data=datalist,control = list(adapt_delta = 0.9))
-# 
-# print(mod1)
-# 
-# pairs(mod1,pars=c('b0','b0sd','b1','lp__')) 
-# 
-# stan_plot(mod1,pars=c('b0','b1'))
-# stan_dens(mod1,pars=c('b0','b1'))
-# 
-# #Autocorrelation plots for all params - high AC, so poor effective sampling
-# stan_ac(mod1,pars=c('b0','b0sd','b1','lp__'))
-# 
-# mod1fit=extract(mod1)
-# 
-# b0site=apply(mod1fit$b0site,2,median)
-# b0=mod1fit$b0
-# b1=mod1fit$b1
-# centDate=-23:25
-# 
-# res1=data.frame(date=centDate,fit=NA,upr=NA,lwr=NA)
-# 
-# for(i in 1:length(centDate)){ #Predictions
-#   res1$fit[i]=exp(median(b0)+median(b1)*centDate[i])
-#   res1[i,3:4]=quantile(exp(b0+b1*centDate[i]),c(0.0275,0.975))
+#Single-year model of wild bees - test using Stan ---------------
+library("rstan")
+rstan_options(auto_write = TRUE)
+options(mc.cores = 3)
+setwd("~/Projects/UofC/wildbee_canola_project/models")
+library(shinystan)
+
+#Names of top4 wild spp
+top4=filter(bees,BLID %in% year2year,!agricultural)  %>%
+  mutate(year=paste0('y',year)) %>%
+  group_by(year,genSpp) %>%
+  summarize(number=n()) %>%
+  spread(year,number,fill=0) %>%
+  mutate(notZero=(y2015>0&y2016>0),diff=abs(y2015-y2016),total=y2015+y2016) %>%
+  filter(notZero) %>% #Filter years with zero in one year
+  filter((diff/total)<0.5) %>% #Filter sp where magnitude of yearly difference is less than 50% of total count
+  arrange(desc(total)) %>%
+  top_n(4,total) %>%
+  .$genSpp
+
+#Occurance data for top 4 bees
+top4bees=filter(bees,BLID %in% year2year) %>%
+  filter(genSpp %in% top4)
+
+#Trapping occurance data (start and end of passes)
+passes=trap %>%
+  select(BLID,pass,replicate,year,startDate,midDate,endDate,canolaBloom) %>%
+  distinct() %>%
+  unite(ID,BLID:year,remove=F) %>%
+  arrange(year,BLID,pass)
+
+#Anthophora model from 2015 only
+temp=group_by(top4bees,genSpp,BLID,pass,replicate,year) %>% #Abundance by date & trap
+  summarize(count=n()) %>%
+  unite(ID,BLID:year) %>%
+  spread(genSpp,count) %>%
+  full_join(passes,by='ID') %>%
+  gather('genSpp','count',2:5) %>%
+  mutate(count=ifelse(is.na(count),0,count)) %>% #Changes NAs to zeros
+  select(-ID) %>%
+  mutate(BLID=factor(BLID)) %>%
+  arrange(genSpp,year,BLID,pass) %>%
+  filter(year==2015,genSpp=='Anthophora terminalis')
+
+#Trying poisson GLMM with traplength offset - equivalent: count~centDate+(1|site),offset=log(week)
+
+datalist=with(temp, #Data to feed into STAN
+              list(
+                N=nrow(temp), #Number of total samples
+                Nsite=length(unique(BLID)), #Number of sites
+                count=count, #Count of bees
+                site=as.numeric(BLID), #site index
+                traplength=(endDate-startDate)/7, #offset (in weeks)
+                centDate=midDate-mean(midDate) #Centered date
+              )
+)
+
+mod1 = stan(file = 'poissonGLMM.stan',data=datalist,control = list(adapt_delta = 0.9))
+
+print(mod1)
+
+pairs(mod1,pars=c('b0','b0sd','b1','lp__'))
+
+stan_plot(mod1,pars=c('b0','b1'))
+stan_dens(mod1,pars=c('b0','b1'))
+
+#Autocorrelation plots for all params
+stan_ac(mod1,pars=c('b0','b0sd','b1','lp__'))
+
+mod1fit=extract(mod1)
+
+b0site=apply(mod1fit$b0site,2,median)
+b0=mod1fit$b0
+b1=mod1fit$b1
+centDate=-23:25
+
+res1=data.frame(date=centDate,fit=NA,upr=NA,lwr=NA)
+
+for(i in 1:length(centDate)){ #Predictions
+  res1$fit[i]=exp(median(b0)+median(b1)*centDate[i])
+  res1[i,3:4]=quantile(exp(b0+b1*centDate[i]),c(0.0275,0.975))
+}
+#Not bad
+ggplot(res1,aes(centDate+mean(temp$midDate),fit))+
+  geom_point(data=temp,aes(x=midDate,y=count*7/(endDate-startDate)))+
+  #geom_line(data=temp,aes(x=midDate,y=count,group=BLID))+
+  geom_line(col='red',size=1)+geom_ribbon(aes(ymax=upr,ymin=lwr),alpha=0.3)+
+  labs(x='Day of year',y='Predicted count',title='Poisson GLMM')+ylim(0,20)
+
+#Trying negbin GLMM with traplength offset - equivalent: count~centDate+(1|site),offset=log(week)
+
+datalist=with(temp, #Data to feed into STAN
+              list(
+                N=nrow(temp), #Number of total samples
+                Nsite=length(unique(BLID)), #Number of sites
+                count=count, #Count of bees
+                site=as.numeric(BLID), #site index
+                traplength=(endDate-startDate)/7, #offset (in weeks)
+                centDate=midDate-mean(midDate) #Centered date
+              )
+)
+
+mod2 = stan(file='nbGLMM.stan',data=datalist)
+
+print(mod2)
+
+vars=c('b0','b1','phi') #Parameters of interest
+pairs(mod2,pars=vars)
+
+stan_plot(mod2,pars=vars)
+stan_dens(mod2,pars=vars)
+stan_ac(mod2,pars=vars) #AC is OK
+
+mod2fit=extract(mod2,pars=c(vars))
+
+b0site=apply(mod2fit$b0site,2,median)
+b0=mod2fit$b0
+b1=mod2fit$b1
+centDate=-23:25
+
+res2=data.frame(date=centDate,fit=NA,upr=NA,lwr=NA)
+
+for(i in 1:length(centDate)){ #Predictions
+  res2$fit[i]=exp(median(b0)+median(b1)*centDate[i])
+  res2[i,3:4]=quantile(exp(b0+b1*centDate[i]),c(0.0275,0.975))
+}
+#Looks OK - about the same as poisson GLMM, but phi term is >1
+ggplot(res2,aes(centDate+mean(temp$midDate),fit))+
+  geom_point(data=temp,aes(x=midDate,y=count*7/(endDate-startDate)))+
+  #geom_line(data=temp,aes(x=midDate,y=count,group=BLID))+
+  geom_line(col='red',size=1)+geom_ribbon(aes(ymax=upr,ymin=lwr),alpha=0.3)+
+  labs(x='Day of year',y='Predicted count',title='NB GLMM')+ylim(0,20)
+
+#Trying gaussian process model
+
+datalist=with(temp, #Data to feed into STAN
+              list(
+                N=nrow(temp), #Number of total samples
+                Nsite=length(unique(BLID)), #Number of sites
+                NperSite=unname(tapply(1:nrow(temp),temp$BLID,length)), #Number of obs per site
+                count=count, #Count of bees
+                site=as.numeric(BLID), #site index
+                traplength=(endDate-startDate)/7, #offset (in weeks)
+                centDate=midDate-mean(midDate), #Centered date
+                #Site covariance matrix, to remove correlation b/w 
+                siteCov=outer(as.numeric(BLID),as.numeric(BLID),FUN=function(x,y) ifelse(x==y,1,0))
+              )
+)
+# initlist <- function(){
+#   list(rho=10,alpha=2,eta=rnorm(datalist$N,0,0.1),b0=1)
 # }
-# #Not bad
-# ggplot(res1,aes(centDate+mean(temp$midDate),fit))+
-#   geom_point(data=temp,aes(x=midDate,y=count*7/(endDate-startDate)))+
-#   #geom_line(data=temp,aes(x=midDate,y=count,group=BLID))+
-#   geom_line(col='red',size=1)+geom_ribbon(aes(ymax=upr,ymin=lwr),alpha=0.3)+
-#   labs(x='Day of year',y='Predicted count',title='Poisson GLMM')+ylim(0,20)
-# 
-# #Trying negbin GLMM with traplength offset - equivalent: count~centDate+(1|site),offset=log(week)
-# 
-# datalist=with(temp, #Data to feed into STAN
-#               list(
-#                 N=nrow(temp), #Number of total samples
-#                 Nsite=length(unique(BLID)), #Number of sites
-#                 count=count, #Count of bees
-#                 site=as.numeric(BLID), #site index
-#                 traplength=(endDate-startDate)/7, #offset (in weeks)
-#                 centDate=midDate-mean(midDate) #Centered date
-#               )
-# )
-# 
-# mod2 = stan(file='nbGLMM.stan',data=datalist)
-# 
-# print(mod2)
-# 
-# vars=c('b0','b1','phi') #Parameters of interest
-# pairs(mod2,pars=vars) 
-# 
-# stan_plot(mod2,pars=vars)
-# stan_dens(mod2,pars=vars)
-# stan_ac(mod2,pars=vars) #AC is OK
-# 
-# mod2fit=extract(mod2,pars=vars)
-# 
-# b0site=apply(mod2fit$b0site,2,median)
-# b0=mod2fit$b0
-# b1=mod2fit$b1
-# centDate=-23:25
-# 
-# res2=data.frame(date=centDate,fit=NA,upr=NA,lwr=NA)
-# 
-# for(i in 1:length(centDate)){ #Predictions
-#   res2$fit[i]=exp(median(b0)+median(b1)*centDate[i])
-#   res2[i,3:4]=quantile(exp(b0+b1*centDate[i]),c(0.0275,0.975))
-# }
-# #Looks OK - about the same as poisson GLMM, but phi term is >1 
-# ggplot(res2,aes(centDate+mean(temp$midDate),fit))+
-#   geom_point(data=temp,aes(x=midDate,y=count*7/(endDate-startDate)))+
-#   #geom_line(data=temp,aes(x=midDate,y=count,group=BLID))+
-#   geom_line(col='red',size=1)+geom_ribbon(aes(ymax=upr,ymin=lwr),alpha=0.3)+
-#   labs(x='Day of year',y='Predicted count',title='NB GLMM')+ylim(0,20)
-# 
-# detach("package:rstan", unload=TRUE) #Detach rstan
+  
+#Run model - very slow
+modGP = stan(file='gpMod1.stan',data=datalist,iter=2000,chains=3)
+
+print(modGP,pars=c('rho','alpha','b0','b0sd'))
+pairs(modGP,pars=c('rho','alpha','b0','b0sd'))
+launch_shinystan(modGP)
+
+#Try this in BRMS
+library(brms)
+make_stancode(count~gp(endDate,by=BLID),family=poisson,data=temp)
+
+make_stancode(count~gp(endDate)+(1|BLID),family=poisson,data=temp)
+
+
+
+
+detach("package:rstan", unload=TRUE) #Detach rstan
 
 
 # Unused models -----------------------------------------------------------
