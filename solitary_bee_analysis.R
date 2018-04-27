@@ -1289,7 +1289,8 @@ datalist=with(temp, #Data to feed into STAN
                 site=as.numeric(BLID), #site index
                 year=year, #Year of observation
                 NperSite=matrix(aggregate(pass~BLID+year,data=temp,length)$pass,ncol=2), #Number of obs per site per year
-                SNL=aggregate(Seminatural_500~BLID,mean,data=landscape)[,2], #Amount of SNL_500 at each site (seems more stable than 250)
+                #Centered Amount of SNL_500 at each site (seems more stable than 250)
+                SNL=aggregate(Seminatural_500~BLID,mean,data=landscape)[,2]-0.5, 
                 count=count, #Count of bees
                 traplength=traplength, #offset (in weeks)
                 centDate=centDate, #Centered date
@@ -1303,13 +1304,15 @@ datalist=with(temp, #Data to feed into STAN
 str(datalist)
 
 #Run model
-modGP = stan(file='gpMod1.stan',data=datalist,iter=2000,chains=1,
-             control=list(adapt_delta=0.8))
+library(beepr)
+modGP = stan(file='gpMod1.stan',data=datalist,warmup=2000,iter=4000,chains=2,thin=2,
+             control=list(adapt_delta=0.9))
+beep(1)
 
-#I think this is producing collinear estimates because of relationship between b0site in y1 and y2. 
-print(modGP,pars=c('rho','alpha','sigma','b0','SNLslope','slopeLastYear','muCanola','sigmaCanola','residCanola'))
-traceplot(modGP,pars=c('rho','alpha','sigma','b0','SNLslope','slopeLastYear','muCanola','sigmaCanola','residCanola'))
-plot(modGP,pars=c('rho','alpha','sigma','b0','SNLslope','slopeLastYear','muCanola','sigmaCanola','residCanola'))
+#Looks good. Next step is to get a better method for estimating rho, alpha, sigma. Try out model without random effect for each term to see if it improves model fit
+print(modGP,pars=c('rho','alpha','sigma','b0','b0sd','SNLslope','slopeLastYear','intLastYear'))
+traceplot(modGP,pars=c('rho','alpha','sigma','b0','b0sd','SNLslope','slopeLastYear','intLastYear'))
+plot(modGP,pars=c('rho','alpha','sigma','b0','b0sd','SNLslope','slopeLastYear','intLastYear'))
 
 print(modGP,pars=c('rhoSite'))
 print(modGP,pars=c('alphaSite'))
@@ -1325,32 +1328,57 @@ ggplot(temp,aes(midDate,count,col=factor(year),group=paste(year,BLID,replicate))
 
 modGP_results <- extract(modGP)
 
-par(mfrow=c(3,1)) #Plot b0site results
-hist(apply(modGP_results$b0site[,,1],2,median),main='b0 2015')
-hist(apply(modGP_results$b0site[,,2],2,median),main='b0 2016')
-plot(exp(apply(modGP_results$b0site[,,1]+modGP_results$b0[,1],2,median)),
-     exp(apply(modGP_results$b0site[,,2]+modGP_results$b0[,2],2,median)),
-     xlab='year1',ylab='year2')
-abline(0,1,lty='dashed')
-par(mfrow=c(1,1))
+with(modGP_results,{
+  par(mfrow=c(3,1))
+  hist(b0sd[,1])
+  hist(b0sd[,2])
+  curve(MCMCpack::dinvgamma(x,2,1),min(b0sd[,2]),max(b0sd[,2]))
+  # curve(MCMCpack::dinvgamma(x,2,1),min(b0sd[,2]),max(b0sd[,2]))
+})
 
-par(mfrow=c(3,2)) #Plot rhoSite and alphaSite results
-hist(apply(modGP_results$rhoSite[,,1],2,median),main=NULL,xlab='rho 2015')
-abline(v=2/median(modGP_results$rho[,1]),col='red')
-hist(apply(modGP_results$alphaSite[,,1],2,median),main=NULL,xlab='alpha 2015')
+# with(modGP_results,{
+#   par(mfrow=c(3,1)); #Plot b0site results
+#   year2015 <- median(SNLslope[,1])*datalist$SNL+apply(b0err[,,1],2,median);
+#   year2016 <- (median(slopeLastYear)*year2015)+median(SNLslope[,2])*datalist$SNL+apply(b0err[,,2],2,median);
+#   hist(year2015,main='b0 2015');
+#   hist(year2016,main='b0 2016');
+#   plot(year2015,year2016,xlab='b0 2015',ylab='b0 2016')
+#   abline(0,1,lty='dashed');
+#   par(mfrow=c(1,1));
+# })
 
-hist(apply(modGP_results$rhoSite[,,2],2,median),main=NULL,xlab='rho 2016')
-abline(v=median(modGP_results$rho[,2]),col='red')
-hist(apply(modGP_results$alphaSite[,,2],2,median),main=NULL,xlab='alpha 2016')
-plot(apply(modGP_results$rhoSite[,,1],2,median),
-     apply(modGP_results$rhoSite[,,2],2,median),
-     xlab='rho year1',ylab='rho year2')
-abline(0,1,lty='dashed')
-plot(apply(modGP_results$alphaSite[,,1],2,median),
-     apply(modGP_results$alphaSite[,,2],2,median),
-     xlab='alpha year1',ylab='alpha year2')
-abline(0,1,lty='dashed')
-par(mfrow=c(1,1))
+with(modGP_results,{
+  par(mfrow=c(2,2)); #Plot b0site results
+  year2015 <- apply(b0err[,,1],2,median);
+  year2016 <- apply(b0err[,,2],2,median);
+  hist(year2015,main='b0 2015');
+  hist(year2016,main='b0 2016');
+  plot(year2015,year2016,xlab='b0 2015',ylab='b0 2016')
+  abline(0,1,lty='dashed');
+  plot(datalist$SNL,year2016,xlab='SNL',ylab='b0 2016')
+  par(mfrow=c(1,1));
+})
+
+with(modGP_results,{
+  par(mfrow=c(3,2)) #Plot rhoSite and alphaSite results
+  hist(apply(rhoSite[,,1],2,median),main=NULL,xlab='rho 2015',breaks=20)
+  abline(v=2/median(rho[,1]),col='red')
+  hist(apply(alphaSite[,,1],2,median),main=NULL,xlab='alpha 2015',breaks=20)
+  
+  hist(apply(rhoSite[,,2],2,median),main=NULL,xlab='rho 2016',breaks=20)
+  abline(v=median(rho[,2]),col='red')
+  hist(apply(alphaSite[,,2],2,median),main=NULL,xlab='alpha 2016',breaks=20)
+  plot(apply(rhoSite[,,1],2,median),
+       apply(rhoSite[,,2],2,median),
+       xlab='rho year1',ylab='rho year2')
+  abline(0,1,lty='dashed')
+  plot(apply(alphaSite[,,1],2,median),
+       apply(alphaSite[,,2],2,median),
+       xlab='alpha year1',ylab='alpha year2')
+  abline(0,1,lty='dashed')
+  par(mfrow=c(1,1))
+})
+
 
 detach("package:rstan", unload=TRUE) #Detach rstan
 

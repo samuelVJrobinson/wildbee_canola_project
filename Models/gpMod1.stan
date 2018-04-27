@@ -42,16 +42,18 @@ parameters {
 	real<lower=0> alpha[2]; //Max covariance b/w points aka marginal SD parameter
 	real<lower=0> sigma; //Variance between obs at same time
 	matrix<lower=0,upper=8>[Nsite,2] rhoSite; // Rho for each site
-	matrix<lower=0,upper=8>[Nsite,2] alphaSite; //Alpha for each site
-	
+	matrix<lower=0,upper=8>[Nsite,2] alphaSite; //Alpha for each site	
 	vector[N] eta; //Unit normals
 	
 	//Bee count parameters - 1 for each year
 	real b0[2]; //"Global intercept" - mean for neg.bin. process		
-	real<lower=0> b0sd[2]; //SD for site intercept
-	matrix[Nsite,2] b0site; //site intercept
+	vector[Nsite] b0err; //"Error" for site intercept
+	real<lower=0> b0sd; //SD for generating site error
+	// matrix[Nsite,2] b0err; //"Error" for site intercept
+	// real<lower=0> b0sd[2]; //SD for generating site error
 	real SNLslope[2]; //SNL effect on site intercept
 	real slopeLastYear; //Effect of last year on site intercept	
+	real intLastYear; //Interaction between SNL and last year's intercept
 	real<lower=0> phi; //Dispersion parameter for neg. bin.
 	
 	//Canola bloom parameters - 1 for each year
@@ -64,27 +66,32 @@ model {
 	//Setup
 	vector[N] mu = rep_vector(0, N); //Expected value for neg. bin. process
 	vector[Ncanola] predCanola = rep_vector(0, Ncanola); //Predicted canola bloom for observed values				
-	//matrix[Nsite,2] b0mu; // Predicted site intercept
+	matrix[Nsite,2] b0site; // Site intercept - influenced by other things (see below)
 	int pos = 1; //First position in vector		
 	
 	/* Model for per-site bee counts (intercepts)
-		count2015 = SNLslope2015*SNL : SNL controls "long-term" abundance 
-		count2016 = SNLslope2016*SNL + slope2015*count2015 : year-to-year transition rate + last year's abundance
+		intercept2015 = SNLslope2015*SNL : SNL controls "long-term" abundance 
+		intercept2016 = SNLslope2016*SNL + slope2015*count2015 : year-to-year transition rate + last year's abundance
 	*/		
-	//b0mu[,1]= SNLslope[1]*SNL; //Year effect + Effect of SNL
-	//b0mu[,2]= SNLslope[2]*SNL + slopeLastYear*(b0mu[,1]); //Gives a "deep copy" warning if using vector directly
+	b0site[,1]= SNLslope[1]*SNL + b0err; //Site intercept 2015 = Effect of SNL + "Error"
+	// Site intercept 2016 = Effect of SNL + Effect of 2015 + Interaction
+	b0site[,2]= SNLslope[2]*SNL + slopeLastYear*(b0site[,1]) + intLastYear*((b0site[,1]).*SNL); 
+	// b0site[,1]= b0err[,1]; //Test version estimating only random intercepts, but without any 
+	// b0site[,2]= b0err[,2]; // Site intercept 2016 = Effect of SNL + Effect of 2015 + "Error"
+	
+	//Gives a "deep copy" warning if using vector directly
 		
 	/*Model for per-pass bee counts:
 	counts ~ negbin(mu,phi)
 	mu= global intercept + site intercept + SNL effect + gaussian process 
 	*/			
 	for(i in 1:Nsite){ //Adds mu to gaussian process for year 1
-		mu[pos:(NperSite[i,1]+pos-1)] = b0[1] + b0site[i,1] + SNLslope[1]*SNL[i] +
+		mu[pos:(NperSite[i,1]+pos-1)] = b0[1] + b0site[i,1] + 
 			gp(centDate[pos:(NperSite[i,1]+pos-1)], alphaSite[i,1], rhoSite[i,1], sigma, eta[pos:(NperSite[i,1]+pos-1)]); 
 		pos=pos+NperSite[i,1]; //Increment position
 	}
 	for(i in 1:Nsite){ //Adds mu to gaussian process for year 2 
-		mu[pos:NperSite[i,2]+pos-1] =  b0[2] + b0site[i,2] + SNLslope[2]*SNL[i] + b0site[i,1]*slopeLastYear +
+		mu[pos:NperSite[i,2]+pos-1] =  b0[2] + b0site[i,2] + 
 			gp(centDate[pos:NperSite[i,2]+pos-1], alphaSite[i,2], rhoSite[i,2], sigma, eta[pos:NperSite[i,2]+pos-1]); 
 		pos=pos+NperSite[i,2]; //Increment position
 	}
@@ -117,13 +124,15 @@ model {
 	//Bee counts for each site - 1 for each year
 	b0[1] ~ normal(0,5); //Hyperprior for the site mean ("global intercept")
 	b0[2] ~ normal(0,5); 	
-	b0sd[1] ~ gamma(1,1);//Hyperprior for site SD
-	b0sd[2] ~ gamma(1,1);		
-	b0site[,1] ~ normal(0,b0sd[1]); //Site intercept ~ predicted site intercept 
-	b0site[,2] ~ normal(0,b0sd[2]);
+	b0sd ~ inv_gamma(2,1);//Hyperprior for site SD
+	//b0sd[2] ~ inv_gamma(2,1);		
+	b0err ~ normal(0,b0sd); //Site intercept ~ predicted site intercept 
+	//b0err[,1] ~ normal(0,b0sd[1]); //Other version using 2 separate intercepts - not enough info to estimate
+	//b0err[,2] ~ normal(0,b0sd[2]);
 	SNLslope[1] ~ normal(0,3); //Prior for effect of SNL
 	SNLslope[2] ~ normal(0,3);
-	slopeLastYear ~ normal(0,5); //Effect of last year's intercept	
+	slopeLastYear ~ normal(0,3); //Effect of last year's intercept
+	intLastYear ~ normal(0,3); //Interaction b/w SNL and last year's intercept
 	phi ~ gamma(1.5,1); //Prior for NB dispersion parameter 		
 	
 	//Canola bloom
