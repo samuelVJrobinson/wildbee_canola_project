@@ -1186,7 +1186,6 @@ temp=group_by(top4bees,genSpp,BLID,pass,replicate,year) %>% #Abundance by date &
   arrange(genSpp,year,BLID,pass) %>%
   filter(genSpp=='Anthophora terminalis') %>% 
   mutate(traplength=(endDate-startDate)/7) %>% #Trapping period (in weeks)
-  group_by(year) %>% 
   mutate(centDate=(midDate-mean(midDate))/7) %>%  #Centers midDate and converts to week
   mutate(centEndDate=(endDate-mean(midDate))/7) %>%  #Centers endDate and coverts to week - used for canola bloom
   group_by(year,BLID) %>% 
@@ -1290,6 +1289,7 @@ datalist=with(temp, #Data to feed into STAN
                 site=as.numeric(BLID), #site index
                 year=year, #Year of observation
                 NperSite=matrix(aggregate(pass~BLID+year,data=temp,length)$pass,ncol=2), #Number of obs per site per year
+                SNL=aggregate(Seminatural_500~BLID,mean,data=landscape)[,2], #Amount of SNL_500 at each site (seems more stable than 250)
                 count=count, #Count of bees
                 traplength=traplength, #offset (in weeks)
                 centDate=centDate, #Centered date
@@ -1299,32 +1299,56 @@ datalist=with(temp, #Data to feed into STAN
                 nearCanola=as.numeric(nearCanola[!is.na(canolaBloom)]) #Was field during that year near canola?
               )
 )
+
 str(datalist)
 
 #Run model
-modGP = stan(file='gpMod1.stan',data=datalist,iter=2000,chains=1)
+modGP = stan(file='gpMod1.stan',data=datalist,iter=2000,chains=1,
+             control=list(adapt_delta=0.8))
 
-print(modGP,pars=c('rho','alpha','b0','b1','phi','muCanola','sigmaCanola','residCanola'))
-# pairs(modGP,pars=c('rho','alpha','b0','b0sd'))
+#I think this is producing collinear estimates because of relationship between b0site in y1 and y2. 
+print(modGP,pars=c('rho','alpha','sigma','b0','SNLslope','slopeLastYear','muCanola','sigmaCanola','residCanola'))
+traceplot(modGP,pars=c('rho','alpha','sigma','b0','SNLslope','slopeLastYear','muCanola','sigmaCanola','residCanola'))
+plot(modGP,pars=c('rho','alpha','sigma','b0','SNLslope','slopeLastYear','muCanola','sigmaCanola','residCanola'))
+
+print(modGP,pars=c('rhoSite'))
+print(modGP,pars=c('alphaSite'))
+print(modGP,pars=c('b0site'))
+
+pairs(modGP,pars=c('rho[1]','alpha[1]','sigma'))
+pairs(modGP,pars=c('rho[2]','alpha[2]','sigma'))
 launch_shinystan(modGP)
+
+#Plot of population between years
+ggplot(temp,aes(midDate,count,col=factor(year),group=paste(year,BLID,replicate)))+geom_point()+geom_line()+facet_wrap(~BLID)+
+  scale_y_sqrt()+labs(col='Year')
 
 modGP_results <- extract(modGP)
 
-par(mfrow=c(3,1))
-hist(apply(modGP_results$b0site[,,1]+modGP_results$b0[,1],2,median),main='b0 2015')
-hist(apply(modGP_results$b0site[,,2]+modGP_results$b0[,2],2,median),main='b0 2016')
+par(mfrow=c(3,1)) #Plot b0site results
+hist(apply(modGP_results$b0site[,,1],2,median),main='b0 2015')
+hist(apply(modGP_results$b0site[,,2],2,median),main='b0 2016')
 plot(exp(apply(modGP_results$b0site[,,1]+modGP_results$b0[,1],2,median)),
      exp(apply(modGP_results$b0site[,,2]+modGP_results$b0[,2],2,median)),
      xlab='year1',ylab='year2')
 abline(0,1,lty='dashed')
 par(mfrow=c(1,1))
 
-par(mfrow=c(3,1))
-hist(apply(modGP_results$b0site[,,1],2,median),main='b0 2015')
-hist(apply(modGP_results$b0site[,,2],2,median),main='b0 2016')
-plot(exp(apply(modGP_results$b0site[,,1],2,median)),
-     exp(apply(modGP_results$b0site[,,2],2,median)),
-     xlab='year1',ylab='year2')
+par(mfrow=c(3,2)) #Plot rhoSite and alphaSite results
+hist(apply(modGP_results$rhoSite[,,1],2,median),main=NULL,xlab='rho 2015')
+abline(v=2/median(modGP_results$rho[,1]),col='red')
+hist(apply(modGP_results$alphaSite[,,1],2,median),main=NULL,xlab='alpha 2015')
+
+hist(apply(modGP_results$rhoSite[,,2],2,median),main=NULL,xlab='rho 2016')
+abline(v=median(modGP_results$rho[,2]),col='red')
+hist(apply(modGP_results$alphaSite[,,2],2,median),main=NULL,xlab='alpha 2016')
+plot(apply(modGP_results$rhoSite[,,1],2,median),
+     apply(modGP_results$rhoSite[,,2],2,median),
+     xlab='rho year1',ylab='rho year2')
+abline(0,1,lty='dashed')
+plot(apply(modGP_results$alphaSite[,,1],2,median),
+     apply(modGP_results$alphaSite[,,2],2,median),
+     xlab='alpha year1',ylab='alpha year2')
 abline(0,1,lty='dashed')
 par(mfrow=c(1,1))
 

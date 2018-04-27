@@ -5,17 +5,17 @@ functions {
    *   sdgp: marginal SD parameter
    *   lscale: length-scale parameter
    *   zgp: vector of independent standard normal variables 
-   *   delta0: small number to make matrix positive-definite
+   *   sigma: variance if distance = 0
    * Returns:  
    *   a vector to be added to the linear predictor
    */ 
-  vector gp(vector x, real sdgp, real lscale, vector zgp) {
+  vector gp(vector x, real sdgp, real lscale, real sigma, vector zgp) {
     matrix[rows(x), rows(x)] cov; //Declare covariance matrix
 	real x_act[rows(x)];
 	for(i in 1:rows(x)){ //This is a weird work-around that allows x to be defined as a row vector.
 		x_act[i]=x[i];
 	}		
-    cov = cov_exp_quad(x_act, sdgp, lscale) + diag_matrix(rep_vector(1e-9, rows(x))); // deal with numerical non-positive-definiteness    	
+    cov = cov_exp_quad(x_act, sdgp, lscale) + diag_matrix(rep_vector(sigma + 1e-9, rows(x))); // deal with numerical non-positive-definiteness    	
     return cholesky_decompose(cov) * zgp; //Decomposed covariance matrix * unit normals
   }  
 } 
@@ -26,6 +26,7 @@ data {
 	int<lower=1,upper=Nsite> site[N]; //Site index	
 	int year[N]; //Year
 	int NperSite[Nsite,2]; //Number of data points per site per year
+	vector[Nsite] SNL; //Amount of SNL within 500m of each site
 	int<lower=0> count[N]; //Number of bees	
 	vector[N] traplength; //Traplength offset (in weeks)
 	vector[N] centDate; //Centered date (in weeks, centered per-year)	
@@ -37,14 +38,20 @@ data {
 
 parameters {
 	//Params for GP - 1 for each year
-	real<lower=0> rho[2]; //Length-scale: how fast does correlation decay with distance
-	real<lower=0> alpha[2]; //Max covariance b/w points aka marginal SD parameter		
+	real<lower=0,upper=8> rho[2]; //Length-scale: how fast does correlation decay with distance
+	real<lower=0> alpha[2]; //Max covariance b/w points aka marginal SD parameter
+	real<lower=0> sigma; //Variance between obs at same time
+	matrix<lower=0,upper=8>[Nsite,2] rhoSite; // Rho for each site
+	matrix<lower=0,upper=8>[Nsite,2] alphaSite; //Alpha for each site
+	
 	vector[N] eta; //Unit normals
 	
 	//Bee count parameters - 1 for each year
-	real b0[2]; //"Global intercept" - mean for poisson process	
-	real <lower=0> b0sd[2]; //SD for global intercept
-	matrix[Nsite,2] b0site; //site intercept	
+	real b0[2]; //"Global intercept" - mean for neg.bin. process		
+	real<lower=0> b0sd[2]; //SD for site intercept
+	matrix[Nsite,2] b0site; //site intercept
+	real SNLslope[2]; //SNL effect on site intercept
+	real slopeLastYear; //Effect of last year on site intercept	
 	real<lower=0> phi; //Dispersion parameter for neg. bin.
 	
 	//Canola bloom parameters - 1 for each year
@@ -57,18 +64,28 @@ model {
 	//Setup
 	vector[N] mu = rep_vector(0, N); //Expected value for neg. bin. process
 	vector[Ncanola] predCanola = rep_vector(0, Ncanola); //Predicted canola bloom for observed values				
+	//matrix[Nsite,2] b0mu; // Predicted site intercept
+	int pos = 1; //First position in vector		
+	
+	/* Model for per-site bee counts (intercepts)
+		count2015 = SNLslope2015*SNL : SNL controls "long-term" abundance 
+		count2016 = SNLslope2016*SNL + slope2015*count2015 : year-to-year transition rate + last year's abundance
+	*/		
+	//b0mu[,1]= SNLslope[1]*SNL; //Year effect + Effect of SNL
+	//b0mu[,2]= SNLslope[2]*SNL + slopeLastYear*(b0mu[,1]); //Gives a "deep copy" warning if using vector directly
 		
 	/*Model for per-pass bee counts:
 	counts ~ negbin(mu,phi)
-	mu= overall intercept + site intercept + gaussian process 
-	*/
-	int pos = 1; //First position in vector			
+	mu= global intercept + site intercept + SNL effect + gaussian process 
+	*/			
 	for(i in 1:Nsite){ //Adds mu to gaussian process for year 1
-		mu[pos:(NperSite[i,1]+pos-1)] =  b0[1] + b0site[i,1] + gp(centDate[pos:(NperSite[i,1]+pos-1)], alpha[1], rho[1], eta[pos:(NperSite[i,1]+pos-1)]); 
+		mu[pos:(NperSite[i,1]+pos-1)] = b0[1] + b0site[i,1] + SNLslope[1]*SNL[i] +
+			gp(centDate[pos:(NperSite[i,1]+pos-1)], alphaSite[i,1], rhoSite[i,1], sigma, eta[pos:(NperSite[i,1]+pos-1)]); 
 		pos=pos+NperSite[i,1]; //Increment position
 	}
 	for(i in 1:Nsite){ //Adds mu to gaussian process for year 2 
-		mu[pos:NperSite[i,2]+pos-1] =  b0[2] + b0site[i,2] + gp(centDate[pos:NperSite[i,2]+pos-1], alpha[2], rho[2], eta[pos:NperSite[i,2]+pos-1]); 
+		mu[pos:NperSite[i,2]+pos-1] =  b0[2] + b0site[i,2] + SNLslope[2]*SNL[i] + b0site[i,1]*slopeLastYear +
+			gp(centDate[pos:NperSite[i,2]+pos-1], alphaSite[i,2], rhoSite[i,2], sigma, eta[pos:NperSite[i,2]+pos-1]); 
 		pos=pos+NperSite[i,2]; //Increment position
 	}
 	 
@@ -82,24 +99,32 @@ model {
 				predCanola[i]=100*exp(-0.5*pow((centEndDate[i]-muCanola[2])/sigmaCanola[2],2));
 			}			
 		} 
-	} 
+	} 				
 	
 	//Priors	
 	//Gaussian process - 1 for each year
-	rho[1] ~ gamma(1, 1); //Length-scale
-	rho[2] ~ gamma(1, 1); 
-	alpha[1] ~ gamma(2, 0.2); //Max covariance			
-	alpha[2] ~ gamma(2, 0.2); 
+	rho[1] ~ gamma(2, 1); //Hyperprior for length-scale
+	rho[2] ~ gamma(2, 1); 	
+	rhoSite[,1] ~ gamma(2,rho[1]); //Length-scale
+	rhoSite[,2] ~ gamma(2,rho[2]);
+	alpha[1] ~  cauchy(0, 1); //Hyperprior for covariance			
+	alpha[2] ~  cauchy(0, 1); 
+	alphaSite[,1] ~ cauchy(0,alpha[1]); //Covariance
+	alphaSite[,2] ~ cauchy(0,alpha[2]);	
+	sigma ~ cauchy(0,1); //Variance between points at same site at same time	
   	eta ~ normal(0,1); //Unit normals
 	
-	//Bee counts - 1 for each year
+	//Bee counts for each site - 1 for each year
 	b0[1] ~ normal(0,5); //Hyperprior for the site mean ("global intercept")
-	b0[2] ~ normal(0,5); 
-	b0sd[1] ~ gamma(1,0.5); //Hyperprior for the site SD 
-	b0sd[2] ~ gamma(1,0.5); 
-	b0site[,1] ~ normal(0,b0sd[1]); //Prior for site (difference from global intercept)
-	b0site[,2] ~ normal(0,b0sd[2]); 	
-	phi ~ gamma(1.5,1); //Prior for NB dispersion parameter 
+	b0[2] ~ normal(0,5); 	
+	b0sd[1] ~ gamma(1,1);//Hyperprior for site SD
+	b0sd[2] ~ gamma(1,1);		
+	b0site[,1] ~ normal(0,b0sd[1]); //Site intercept ~ predicted site intercept 
+	b0site[,2] ~ normal(0,b0sd[2]);
+	SNLslope[1] ~ normal(0,3); //Prior for effect of SNL
+	SNLslope[2] ~ normal(0,3);
+	slopeLastYear ~ normal(0,5); //Effect of last year's intercept	
+	phi ~ gamma(1.5,1); //Prior for NB dispersion parameter 		
 	
 	//Canola bloom
 	muCanola[1] ~ normal(0,5); //Mean bloom date
@@ -108,8 +133,7 @@ model {
 	sigmaCanola[2] ~ gamma(3,0.1); 
 	residCanola ~ gamma(1,1); //"Residual"
 		
-	//Likelihood
-	//count ~ poisson_log(mu+log(traplength));	
-	count ~ neg_binomial_2_log(mu+log(traplength),phi);	
-	canolaBloom ~ normal(predCanola,residCanola);
+	//Likelihood	
+	count ~ neg_binomial_2_log(mu+log(traplength),phi);	//Count data
+	canolaBloom ~ normal(predCanola,residCanola);	
 }
