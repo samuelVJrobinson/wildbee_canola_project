@@ -1187,7 +1187,7 @@ temp=group_by(top4bees,genSpp,BLID,pass,replicate,year) %>% #Abundance by date &
   filter(genSpp=='Anthophora terminalis') %>% 
   mutate(traplength=(endDate-startDate)/7) %>% #Trapping period (in weeks)
   mutate(centDate=(midDate-mean(midDate))/7) %>%  #Centers midDate and converts to week
-  mutate(centEndDate=(endDate-mean(midDate))/7) %>%  #Centers endDate and coverts to week - used for canola bloom
+  mutate(centEndDate=(endDate-mean(midDate))/7) %>%  #Centers endDate and coverts to week
   group_by(year,BLID) %>% 
   mutate(nearCanola=any(canolaBloom>0)) #Was canola bloom recorded at that site?
 
@@ -1289,50 +1289,70 @@ datalist=with(temp, #Data to feed into STAN
                 site=as.numeric(BLID), #site index
                 year=year, #Year of observation
                 NperSite=matrix(aggregate(pass~BLID+year,data=temp,length)$pass,ncol=2), #Number of obs per site per year
-                #Centered Amount of SNL_500 at each site (seems more stable than 250)
-                SNL=aggregate(Seminatural_500~BLID,mean,data=landscape)[,2]-0.5, 
                 count=count, #Count of bees
                 traplength=traplength, #offset (in weeks)
-                centDate=centDate, #Centered date
-                centEndDate=centEndDate[!is.na(canolaBloom)], #Centered end date (used for canola bloom)
+                centStartDate=centEndDate-traplength, #Start date
+                centDate=centDate, #Centered date (between start and end)
+                centEndDate=centEndDate, #End date
+                centBloomDate=centEndDate[!is.na(canolaBloom)], #Centered end date (used for canola bloom)
                 canolaBloom=canolaBloom[!is.na(canolaBloom)], #Observed canola bloom
                 bloomIndex=as.numeric(which(!is.na(canolaBloom))), #Index for matching missing observed canola bloom
                 nearCanola=as.numeric(nearCanola[!is.na(canolaBloom)]) #Was field during that year near canola?
               )
 )
 
+datalist=c(datalist,with(landscape, #Adds landscape data
+     list(
+       percSNL=Seminatural_500[year==2015], #Seems to be a fairly good indicator of yearly SNL
+       percCanola=cbind(Canola_250[year==2015],Canola_250[year==2016]) #Canola proportion in 2015/2016
+     ))
+)
 str(datalist)
 
 #Run model
 library(beepr)
-modGP = stan(file='gpMod1.stan',data=datalist,warmup=2000,iter=4000,chains=2,thin=2,
+modGP = stan(file='gpMod1.stan',data=datalist,warmup=200,iter=500,chains=1,
              control=list(adapt_delta=0.9))
 beep(1)
 
 #Looks good. Next step is to get a better method for estimating rho, alpha, sigma. Try out model without random effect for each term to see if it improves model fit
-print(modGP,pars=c('rho','alpha','sigma','b0','b0sd','SNLslope','slopeLastYear','intLastYear'))
-traceplot(modGP,pars=c('rho','alpha','sigma','b0','b0sd','SNLslope','slopeLastYear','intLastYear'))
-plot(modGP,pars=c('rho','alpha','sigma','b0','b0sd','SNLslope','slopeLastYear','intLastYear'))
+pars=c('rho','alpha','sigma','b0','b0sd','SNLslope','slopeLastYear','slopeCanolaOverlap','canolaEffect','phi')
+print(modGP,pars=pars)
+traceplot(modGP,pars=pars)
+plot(modGP,pars=pars)
+
+pars=c('muCanola','sigmaCanola','residCanola') #OK
+print(modGP,pars=pars)
+traceplot(modGP,pars=pars)
+plot(modGP,pars=pars)
+
+print(modGP,pars='siteCanolaLims') #OK
+traceplot(modGP,pars='siteCanolaLims') 
+print(modGP,pars='siteCanolaOverlap') 
+print(modGP,pars='predCanolaPass') 
 
 print(modGP,pars=c('rhoSite'))
 print(modGP,pars=c('alphaSite'))
-print(modGP,pars=c('b0site'))
+print(modGP,pars=c('b0err'))
 
 pairs(modGP,pars=c('rho[1]','alpha[1]','sigma'))
 pairs(modGP,pars=c('rho[2]','alpha[2]','sigma'))
 launch_shinystan(modGP)
 
 #Plot of population between years
-ggplot(temp,aes(midDate,count,col=factor(year),group=paste(year,BLID,replicate)))+geom_point()+geom_line()+facet_wrap(~BLID)+
+ggplot(temp,aes(midDate,count,col=factor(year),group=paste(year,BLID,replicate)))+
+  geom_point()+geom_line()+facet_wrap(~BLID)+
   scale_y_sqrt()+labs(col='Year')
+
+ggplot(temp,aes(midDate,count,group=paste(BLID,replicate)))+
+  geom_point()+geom_line()+facet_wrap(~year,ncol=1)
 
 modGP_results <- extract(modGP)
 
 with(modGP_results,{
-  par(mfrow=c(3,1))
-  hist(b0sd[,1])
-  hist(b0sd[,2])
-  curve(MCMCpack::dinvgamma(x,2,1),min(b0sd[,2]),max(b0sd[,2]))
+  par(mfrow=c(2,1))
+  hist(b0sd,main='Posterior')
+  curve(MCMCpack::dinvgamma(x,2,1),min(b0sd),max(b0sd),main='Prior',ylab='Frequency',xlab='b0sd')
   # curve(MCMCpack::dinvgamma(x,2,1),min(b0sd[,2]),max(b0sd[,2]))
 })
 
