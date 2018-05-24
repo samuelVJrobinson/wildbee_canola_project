@@ -64,8 +64,8 @@ parameters {
 	real b0[2]; //"Global intercept" - mean for neg.bin. process		
 	// vector[Nsite] b0err; //"Error" for site intercept (random effect of site)
 	// real<lower=0> b0sd; //SD for generating site error
-	vector[Nsite] b0err; //"Error" for site intercept (random effect of site)
-	real<lower=0> b0sd; //SD for generating site error
+	matrix[Nsite,2] b0err; //"Error" for site intercept (random effect of site)
+	real<lower=0> b0sd[2]; //SD for generating site error
 	real SNLslope[2]; //SNL effect on site intercept
 	real slopeLastYear; //Effect of last year on site intercept	
 	//real intLastYear; //Interaction between SNL and last year's intercept
@@ -77,6 +77,7 @@ parameters {
 	real muCanola[2]; //Peak bloom time
 	real<lower=0> sigmaCanola[2]; //SD of bloom time
 	real<lower=0> residCanola; //"Residual" for canola bloom - diff b/w predicted and actual	
+	real<lower=0,upper=120> ampCanola[2]; //Amplitude of canola bloom (supposed to be 100, but may differ b/w years)
 }
 
 transformed parameters {
@@ -84,14 +85,19 @@ transformed parameters {
 	vector<lower=0, upper=1>[N] predCanolaPass; //Predicted canola overlap for each pass
 	vector<lower=0>[Nsite] siteCanolaOverlap = rep_vector(0, Nsite); //Summed overlap of canola bloom for each site for year 1
 	matrix[2,2] siteCanolaLims; //stop and start of canola bloom (columns) for year 1 and 2 (rows)
+	//Setup	
+	vector[Ncanola] predCanola = rep_vector(0, Ncanola); //Predicted canola bloom for observed values				
+	matrix[Nsite,2] b0site; // Site intercept - influenced by other things (see below)	
+	vector[N] mu; //Expected value for neg. bin. process		
 	
 	/* 	Calculate "overlap" metric for each pass (for how much of each pass was canola bloom "on" or "off") and
 		multiply by proportion of canola surrounding each site - spatiotemporal availability
 		Sum overlap for each site	*/
 	
-	siteCanolaLims[1,]=invGaus(10,muCanola[1],sigmaCanola[1],100)'; //Start and stop dates of canola (over 10%) for year 1
+	//Start and stop dates of canola (over 10%). Assumes amplitude of 100%
+	siteCanolaLims[1,]=invGaus(10,muCanola[1],sigmaCanola[1],100)'; //Year 1
 	siteCanolaLims[2,]=invGaus(10,muCanola[2],sigmaCanola[2],100)'; // Year 2
-		
+	
 	for(i in 1:N){
 			if(year[i]==2015){  					
 			//Calculate canola overlap for pass = %canola2015 x overlap		
@@ -104,15 +110,7 @@ transformed parameters {
 			predCanolaPass[i]= max([min([siteCanolaLims[2,1],centEndDate[i]])-max([siteCanolaLims[2,2],centEndDate[i]-traplength[i]]),0])/traplength[i]*
 				percCanola[site[i],2]; 
 		}
-	}	
-}
-
-model {  		
-	//Setup
-	vector[N] mu = rep_vector(0, N); //Expected value for neg. bin. process
-	vector[Ncanola] predCanola = rep_vector(0, Ncanola); //Predicted canola bloom for observed values				
-	matrix[Nsite,2] b0site; // Site intercept - influenced by other things (see below)	
-	int pos = 1; //First position in vector
+	}
 	
 	/* Model for per-site bee counts (intercepts)
 		intercept2015 = SNLslope2015*SNL : SNL controls "long-term" abundance 
@@ -120,13 +118,13 @@ model {
 	*/
 
 	//Site intercept 2015	
-	b0site[,1]= SNLslope[1]*percSNL + //Effect of SNL ("Long-term" effect)			 
-				b0err;  //Random effect of site
+	b0site[,1]= SNLslope[1]*percSNL - //Effect of SNL ("Long-term" effect)			 
+				b0err[,1];  //Random effect of site
 	// Site intercept 2016 = Effect of SNL + Effect of 2015 + Interaction
-	b0site[,2]= SNLslope[2]*percSNL + //Effect of SNL ("year-to-year" effect)
-				slopeLastYear*(b0site[,1]) + //Effect of last year's intercept (population)
-				slopeCanolaOverlap*siteCanolaOverlap; //Effect of canola overlap from last year
-				// b0err[,2]; //Random effect of site	
+	b0site[,2]= slopeLastYear*(b0err[,1]) + //Effect of last year's intercept (population)
+				SNLslope[2]*percSNL + //Effect of SNL ("year-to-year" effect)
+				slopeCanolaOverlap*siteCanolaOverlap - //Effect of canola overlap from last year
+				b0err[,2]; //Random effect of site	
 				
 	// b0site[,1]= b0err[,1]; //Test version estimating only random intercepts, but without any 
 	// b0site[,2]= b0err[,2]; // Site intercept 2016 = Effect of SNL + Effect of 2015 + "Error"
@@ -136,18 +134,21 @@ model {
 	/*Model for per-pass bee counts:
 	counts ~ negbin(mu,phi)
 	mu= global intercept + site intercept + gaussian process + SNL effect + canola effect + overlap effect
-	*/			
-	for(i in 1:Nsite){ //Model for counts in year 1
-		mu[pos:(NperSite[i,1]+pos-1)] = b0[1] + b0site[i,1] + //Global intercept + site intercept
-			gp(centDate[pos:(NperSite[i,1]+pos-1)], alpha[1], rho[1], sigma, eta[pos:(NperSite[i,1]+pos-1)]) + //Gaussian process model			
-			canolaEffect[1]*predCanolaPass[pos:(NperSite[i,1]+pos-1)]; //Effect of canola on count
-		pos=pos+NperSite[i,1]; //Increment position
-	}
-	for(i in 1:Nsite){ //Model for counts in year 2	
-		mu[pos:NperSite[i,2]+pos-1] =  b0[2] + b0site[i,2] + //Global intercept + site intercept
-			gp(centDate[pos:NperSite[i,2]+pos-1], alpha[2], rho[2], sigma, eta[pos:NperSite[i,2]+pos-1]) + //Gaussian process model			
-			canolaEffect[2]*predCanolaPass[pos:(NperSite[i,2]+pos-1)]; //Effect of canola on count
-		pos=pos+NperSite[i,2]; //Increment position
+	*/				
+	{
+		int pos = 1; //First position in vector, must be declared locally
+		for(i in 1:Nsite){ //Model for counts in year 1
+			mu[pos:(NperSite[i,1]+pos-1)] = b0[1] + b0err[i,1] + //Global intercept + site intercept
+				gp(centDate[pos:(NperSite[i,1]+pos-1)], alpha[1], rho[1], sigma, eta[pos:(NperSite[i,1]+pos-1)]) + //Gaussian process model			
+				canolaEffect[1]*predCanolaPass[pos:(NperSite[i,1]+pos-1)]; //Effect of canola on count
+			pos=pos+NperSite[i,1]; //Increment position
+		}
+		for(i in 1:Nsite){ //Model for counts in year 2	
+			mu[pos:NperSite[i,2]+pos-1] =  b0[2] + b0err[i,2] + //Global intercept + site intercept
+				gp(centDate[pos:NperSite[i,2]+pos-1], alpha[2], rho[2], sigma, eta[pos:NperSite[i,2]+pos-1]) + //Gaussian process model			
+				canolaEffect[2]*predCanolaPass[pos:(NperSite[i,2]+pos-1)]; //Effect of canola on count
+			pos=pos+NperSite[i,2]; //Increment position
+		}
 	}
 	 
 	/* Model for canola bloom	 
@@ -156,12 +157,15 @@ model {
 	for(i in 1:Ncanola){ 
 		if(nearCanola[i]==1){
 			if(year[bloomIndex[i]]==2015){ 
-				predCanola[i]=100*exp(-0.5*pow((centBloomDate[i]-muCanola[1])/sigmaCanola[1],2));
+				predCanola[i]=ampCanola[1]*exp(-0.5*pow((centBloomDate[i]-muCanola[1])/sigmaCanola[1],2));
 			} else {
-				predCanola[i]=100*exp(-0.5*pow((centBloomDate[i]-muCanola[2])/sigmaCanola[2],2));
+				predCanola[i]=ampCanola[2]*exp(-0.5*pow((centBloomDate[i]-muCanola[2])/sigmaCanola[2],2));
 			}			
 		} 
 	}	
+}
+
+model {  			
 	
 	//Priors	
 	//Gaussian process - 1 for each year
@@ -176,19 +180,21 @@ model {
 	
 	//Bee counts for each site - 1 for each year
 	b0 ~ normal(0,5); //Hyperprior for the site mean ("global intercept")	
-	b0sd ~ inv_gamma(2,1);//Hyperprior for site SD	
-	// b0err ~ normal(0,b0sd); //Site intercept ~ predicted site intercept 
-	b0err ~ normal(0,b0sd); //Other version using 2 separate intercepts - not enough info to estimate
+	b0sd[1] ~ inv_gamma(2,1);//Hyperprior for site SD	
+	b0sd[2] ~ cauchy(0,1);//Hyperprior for site SD	
+	b0err[,1] ~ normal(0,b0sd[1]); //Site intercept ~ predicted site intercept 
+	b0err[,2] ~ normal(0,b0sd[2]); //Other version using 2 separate intercepts - not enough info to estimate
 	// b0err[,2] ~ normal(0,b0sd[2]);
 	SNLslope ~ normal(0,3); //Prior for effect of SNL	
 	slopeLastYear ~ normal(0,3); //Effect of last year's intercept
 	// intLastYear ~ normal(0,3); //Interaction b/w SNL and last year's intercept
-	canolaEffect ~ normal(0,5);	
+	canolaEffect ~ normal(0,3);	
 	phi ~ gamma(1.5,1); //Prior for NB dispersion parameter 		
 	
-	//Canola bloom
-	muCanola ~ normal(0,5); //Mean bloom date	
-	sigmaCanola ~ gamma(3,0.1); //Width of bloom	
+	//Canola bloom - informative priors
+	muCanola ~ normal(-1,1); //Mean bloom date	
+	sigmaCanola ~ gamma(2,2); //Width of bloom	
+	ampCanola ~ normal(100,20); //Amplitude of bloom
 	residCanola ~ gamma(1,1); //"Residual"
 		
 	//Likelihood	
@@ -197,7 +203,12 @@ model {
 }
 
 generated quantities {
-	matrix[N,N] predCov; //Covariance matrix
+	vector[N] expValue = exp(mu+log(traplength)); //Expected value
+	int<lower=0> predCounts[N]; //Predicted counts
+	
+	for(i in 1:N)		
+		predCounts[i]=neg_binomial_2_log_rng(mu[i]+log(traplength[i]),phi);		
+	/* matrix[N,N] predCov; //Covariance matrix
 	matrix[N,N] predCov_L; //Cholesky decomposition
 	vector[N] predGP; //Generated value from Gaussian process
 	
@@ -205,7 +216,7 @@ generated quantities {
 	int pos = 1; //First position in vector
 	
 	
-	//Construct covariance matrix
+	Construct covariance matrix
 	for(i in 1:Nsite){ //Matrix components for year 1
 		predCov[pos:(NperSite[i,1]+pos-1),pos:(NperSite[i,1]+pos-1)] = cov_exp_quad(centDate[pos:(NperSite[i,1]+pos-1)], alpha[1], rho[1]);
 		pos=pos+NperSite[i,1]; //Increment position
@@ -224,10 +235,5 @@ generated quantities {
 		} else {
 			predMu[i]=b0[2]
 		}		
-	}
-	
-	//GET THIS TO GENERATE COUNTS, AND SEE IF THEY MATCH UP WITH ACTUAL COUNTS	
-		
-	neg_binomial_2_log_rng(predMu+log(traplength),phi)
-
+	} */
 }

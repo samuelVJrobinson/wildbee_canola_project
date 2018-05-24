@@ -100,6 +100,8 @@ temp2015=trap %>%
   mutate(canolaBloom=ifelse(canolaBloom=='','0',canolaBloom)) %>%
   rowwise() %>%
   mutate(canolaBloom=text2perc(canolaBloom)) %>%  #Canola perc bloom for 2015
+  ungroup() %>% 
+  mutate(canolaBloom=(100/max(canolaBloom))*canolaBloom) %>%  #Scales by maximum measured bloom (makes max==100%)
   select(BTID,BLID,pass,replicate,startDate:endDate,year,canolaBloom)
 
 temp2016=trap %>%
@@ -1311,7 +1313,7 @@ str(datalist)
 
 #Run model
 library(beepr)
-modGP = stan(file='gpMod1.stan',data=datalist,warmup=200,iter=500,chains=1,
+modGP = stan(file='gpMod1.stan',data=datalist,warmup=750,iter=1500,chains=3,
              control=list(adapt_delta=0.9))
 beep(1)
 
@@ -1320,26 +1322,37 @@ pars=c('rho','alpha','sigma','b0','b0sd','SNLslope','slopeLastYear','slopeCanola
 print(modGP,pars=pars)
 traceplot(modGP,pars=pars)
 plot(modGP,pars=pars)
+pairs(modGP,pars=pars[c(1:3,10)]) #GP parameters, phi
+pairs(modGP,pars=pars[c(4:5)]) #Yearly intercept and random effects
+pairs(modGP,pars=pars[c(6:7)]) #SNL slopes and yearly carryover - SNL effects are correlated
+pairs(modGP,pars=pars[c(8:9)]) 
 
-pars=c('muCanola','sigmaCanola','residCanola') #OK
+
+pars=c('muCanola','sigmaCanola','ampCanola','residCanola') #OK
 print(modGP,pars=pars)
 traceplot(modGP,pars=pars)
+pairs(modGP,pars=pars)
 plot(modGP,pars=pars)
+
+#Plot canola bloom
+with(datalist,data.frame(canolaBloom=canolaBloom,centEndDate=centBloomDate,nearCanola=nearCanola,
+                         year=year[bloomIndex],BLID=site[bloomIndex])) %>%
+  filter(nearCanola==1) %>% 
+  ggplot(aes(centEndDate,canolaBloom,col=factor(year),group=BLID))+
+  geom_point()+geom_smooth(aes(group=year))
 
 print(modGP,pars='siteCanolaLims') #OK
 traceplot(modGP,pars='siteCanolaLims') 
 print(modGP,pars='siteCanolaOverlap') 
 print(modGP,pars='predCanolaPass') 
 
-print(modGP,pars=c('rhoSite'))
-print(modGP,pars=c('alphaSite'))
 print(modGP,pars=c('b0err'))
 
 pairs(modGP,pars=c('rho[1]','alpha[1]','sigma'))
 pairs(modGP,pars=c('rho[2]','alpha[2]','sigma'))
 launch_shinystan(modGP)
 
-#Plot of population between years
+#Plot of population between years (from data)
 ggplot(temp,aes(midDate,count,col=factor(year),group=paste(year,BLID,replicate)))+
   geom_point()+geom_line()+facet_wrap(~BLID)+
   scale_y_sqrt()+labs(col='Year')
@@ -1347,57 +1360,32 @@ ggplot(temp,aes(midDate,count,col=factor(year),group=paste(year,BLID,replicate))
 ggplot(temp,aes(midDate,count,group=paste(BLID,replicate)))+
   geom_point()+geom_line()+facet_wrap(~year,ncol=1)
 
-modGP_results <- extract(modGP)
+modGP_results <- extract(modGP) #Extract values from model
 
-with(modGP_results,{
+with(modGP_results,{ #Prior vs Posterior for b0sd
   par(mfrow=c(2,1))
-  hist(b0sd,main='Posterior')
   curve(MCMCpack::dinvgamma(x,2,1),min(b0sd),max(b0sd),main='Prior',ylab='Frequency',xlab='b0sd')
-  # curve(MCMCpack::dinvgamma(x,2,1),min(b0sd[,2]),max(b0sd[,2]))
+  hist(b0sd,main='Posterior')
 })
 
-# with(modGP_results,{
-#   par(mfrow=c(3,1)); #Plot b0site results
-#   year2015 <- median(SNLslope[,1])*datalist$SNL+apply(b0err[,,1],2,median);
-#   year2016 <- (median(slopeLastYear)*year2015)+median(SNLslope[,2])*datalist$SNL+apply(b0err[,,2],2,median);
-#   hist(year2015,main='b0 2015');
-#   hist(year2016,main='b0 2016');
-#   plot(year2015,year2016,xlab='b0 2015',ylab='b0 2016')
-#   abline(0,1,lty='dashed');
-#   par(mfrow=c(1,1));
-# })
-
 with(modGP_results,{
-  par(mfrow=c(2,2)); #Plot b0site results
-  year2015 <- apply(b0err[,,1],2,median);
-  year2016 <- apply(b0err[,,2],2,median);
+  par(mfrow=c(3,1)); #Plot b0site results
+  year2015 <- apply(b0site[,,1],2,median);
+  year2016 <- apply(b0site[,,2],2,median);
   hist(year2015,main='b0 2015');
   hist(year2016,main='b0 2016');
   plot(year2015,year2016,xlab='b0 2015',ylab='b0 2016')
   abline(0,1,lty='dashed');
-  plot(datalist$SNL,year2016,xlab='SNL',ylab='b0 2016')
   par(mfrow=c(1,1));
 })
 
-with(modGP_results,{
-  par(mfrow=c(3,2)) #Plot rhoSite and alphaSite results
-  hist(apply(rhoSite[,,1],2,median),main=NULL,xlab='rho 2015',breaks=20)
-  abline(v=2/median(rho[,1]),col='red')
-  hist(apply(alphaSite[,,1],2,median),main=NULL,xlab='alpha 2015',breaks=20)
-  
-  hist(apply(rhoSite[,,2],2,median),main=NULL,xlab='rho 2016',breaks=20)
-  abline(v=median(rho[,2]),col='red')
-  hist(apply(alphaSite[,,2],2,median),main=NULL,xlab='alpha 2016',breaks=20)
-  plot(apply(rhoSite[,,1],2,median),
-       apply(rhoSite[,,2],2,median),
-       xlab='rho year1',ylab='rho year2')
-  abline(0,1,lty='dashed')
-  plot(apply(alphaSite[,,1],2,median),
-       apply(alphaSite[,,2],2,median),
-       xlab='alpha year1',ylab='alpha year2')
-  abline(0,1,lty='dashed')
-  par(mfrow=c(1,1))
-})
+hist(apply(modGP_results$b0err,2,median)) #Prior distribution of b0err ("random" intercept)
+
+data.frame(year=datalist$year,eta=exp(apply(modGP_results$eta,2,median)),site=datalist$site,
+           centDate=datalist$centDate,counts=datalist$count) %>% 
+  gather('type','measurement',eta,counts) %>% 
+  ggplot(aes(centDate,measurement))+geom_point()+geom_line(aes(group=site),alpha=0.5)+
+  facet_grid(type~year,scales='free_y')
 
 
 detach("package:rstan", unload=TRUE) #Detach rstan
