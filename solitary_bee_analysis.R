@@ -147,7 +147,7 @@ landscape=landscape %>%
   spread(class,area) %>%
   mutate(Seminatural=Forest+NativeGrassland+Shrubland) %>% #All "seminatural" land
   rename(Pasture=PastureForageCrop) %>%
-  select(-Forest,-NativeGrassland,-Shrubland) %>%
+  # select(-Forest,-NativeGrassland,-Shrubland) %>%
   mutate(totalArea=(pi*as.numeric(radius)^2)) %>%
   mutate_at(vars(Canola:Seminatural),funs(./totalArea)) %>%
   select(-totalArea) %>%
@@ -1147,7 +1147,7 @@ detach("package:jagsUI", unload=TRUE)
 #Single-year model of wild bees - test using Stan ---------------
 library("rstan")
 rstan_options(auto_write = TRUE)
-options(mc.cores = 3)
+options(mc.cores = 4)
 setwd("~/Projects/UofC/wildbee_canola_project/models")
 library(shinystan)
 
@@ -1186,103 +1186,32 @@ temp=group_by(top4bees,genSpp,BLID,pass,replicate,year) %>% #Abundance by date &
   select(-ID) %>%
   mutate(BLID=factor(BLID)) %>%
   arrange(genSpp,year,BLID,pass) %>%
-  filter(genSpp=='Anthophora terminalis') %>% 
+  mutate(genSpp=factor(gsub(' ','_',genSpp))) %>% 
+  spread(genSpp,count) %>% 
   mutate(traplength=(endDate-startDate)/7) %>% #Trapping period (in weeks)
   mutate(centDate=(midDate-mean(midDate))/7) %>%  #Centers midDate and converts to week
   mutate(centEndDate=(endDate-mean(midDate))/7) %>%  #Centers endDate and coverts to week
   group_by(year,BLID) %>% 
   mutate(nearCanola=any(canolaBloom>0)) #Was canola bloom recorded at that site?
 
-# #Trying poisson GLMM with traplength offset - equivalent: count~centDate+(1|site),offset=log(week)
-# datalist=with(temp, #Data to feed into STAN
-#               list(
-#                 N=nrow(temp), #Number of total samples
-#                 Nsite=length(unique(BLID)), #Number of sites
-#                 count=count, #Count of bees
-#                 site=as.numeric(BLID), #site index
-#                 traplength=(endDate-startDate)/7, #offset (in weeks)
-#                 centDate=midDate-mean(midDate) #Centered date
-#               )
-# )
-# 
-# mod1 = stan(file = 'poissonGLMM.stan',data=datalist,control = list(adapt_delta = 0.9))
-# 
-# print(mod1)
-# 
-# pairs(mod1,pars=c('b0','b0sd','b1','lp__'))
-# 
-# stan_plot(mod1,pars=c('b0','b1'))
-# stan_dens(mod1,pars=c('b0','b1'))
-# 
-# #Autocorrelation plots for all params
-# stan_ac(mod1,pars=c('b0','b0sd','b1','lp__'))
-# 
-# mod1fit=extract(mod1)
-# 
-# b0site=apply(mod1fit$b0site,2,median)
-# b0=mod1fit$b0
-# b1=mod1fit$b1
-# centDate=-23:25
-# 
-# res1=data.frame(date=centDate,fit=NA,upr=NA,lwr=NA)
-# 
-# for(i in 1:length(centDate)){ #Predictions
-#   res1$fit[i]=exp(median(b0)+median(b1)*centDate[i])
-#   res1[i,3:4]=quantile(exp(b0+b1*centDate[i]),c(0.0275,0.975))
-# }
-# #Not bad
-# ggplot(res1,aes(centDate+mean(temp$midDate),fit))+
-#   geom_point(data=temp,aes(x=midDate,y=count*7/(endDate-startDate)))+
-#   #geom_line(data=temp,aes(x=midDate,y=count,group=BLID))+
-#   geom_line(col='red',size=1)+geom_ribbon(aes(ymax=upr,ymin=lwr),alpha=0.3)+
-#   labs(x='Day of year',y='Predicted count',title='Poisson GLMM')+ylim(0,20)
-# 
-# #Trying negbin GLMM with traplength offset - equivalent: count~centDate+(1|site),offset=log(week)
-# 
-# datalist=with(temp, #Data to feed into STAN
-#               list(
-#                 N=nrow(temp), #Number of total samples
-#                 Nsite=length(unique(BLID)), #Number of sites
-#                 count=count, #Count of bees
-#                 site=as.numeric(BLID), #site index
-#                 traplength=(endDate-startDate)/7, #offset (in weeks)
-#                 centDate=midDate-mean(midDate) #Centered date
-#               )
-# )
-# 
-# mod2 = stan(file='nbGLMM.stan',data=datalist)
-# 
-# print(mod2)
-# 
-# vars=c('b0','b1','phi') #Parameters of interest
-# pairs(mod2,pars=vars)
-# 
-# stan_plot(mod2,pars=vars)
-# stan_dens(mod2,pars=vars)
-# stan_ac(mod2,pars=vars) #AC is OK
-# 
-# mod2fit=extract(mod2,pars=c(vars))
-# 
-# b0site=apply(mod2fit$b0site,2,median)
-# b0=mod2fit$b0
-# b1=mod2fit$b1
-# centDate=-23:25
-# 
-# res2=data.frame(date=centDate,fit=NA,upr=NA,lwr=NA)
-# 
-# for(i in 1:length(centDate)){ #Predictions
-#   res2$fit[i]=exp(median(b0)+median(b1)*centDate[i])
-#   res2[i,3:4]=quantile(exp(b0+b1*centDate[i]),c(0.0275,0.975))
-# }
-# #Looks OK - about the same as poisson GLMM, but phi term is >1
-# ggplot(res2,aes(centDate+mean(temp$midDate),fit))+
-#   geom_point(data=temp,aes(x=midDate,y=count*7/(endDate-startDate)))+
-#   #geom_line(data=temp,aes(x=midDate,y=count,group=BLID))+
-#   geom_line(col='red',size=1)+geom_ribbon(aes(ymax=upr,ymin=lwr),alpha=0.3)+
-#   labs(x='Day of year',y='Predicted count',title='NB GLMM')+ylim(0,20)
+# Year-to-year landscape proportions (at different radii)
+# landscape %>% 
+#   select(-contains('Canola')) %>% 
+#   unite(Forest,contains('Forest')) %>% 
+#   unite(NatGrass,contains('Native')) %>% unite(Pasture,contains('Pasture')) %>% 
+#   unite(SNL,contains('Seminatural')) %>% unite(Shrub,contains('Shrub')) %>% 
+#   gather('class','numbers',-BLID,-year) %>% 
+#   separate(numbers,c('Rad100','Rad250','Rad500'),sep='_') %>% 
+#   gather('radius','perc',Rad100:Rad500) %>% 
+#   mutate(year=paste0('y',year),perc=as.numeric(perc)) %>%
+#   spread(year,perc) %>% 
+#   filter(radius!='Rad100')
+#   ggplot(aes(y2015,y2016))+geom_point()+
+#   facet_grid(class~radius)+
+#   geom_abline(slope=1,intercept=0)
 
-#Trying gaussian process model
 
+#Gaussian process model
 datalist=with(temp, #Data to feed into STAN
               list(
                 N=nrow(temp), #Number of total samples
@@ -1291,7 +1220,7 @@ datalist=with(temp, #Data to feed into STAN
                 site=as.numeric(BLID), #site index
                 year=year, #Year of observation
                 NperSite=matrix(aggregate(pass~BLID+year,data=temp,length)$pass,ncol=2), #Number of obs per site per year
-                count=count, #Count of bees
+                count=Anthophora_terminalis, #Anthophora count
                 traplength=traplength, #offset (in weeks)
                 centStartDate=centEndDate-traplength, #Start date
                 centDate=centDate, #Centered date (between start and end)
@@ -1311,9 +1240,9 @@ datalist=c(datalist,with(landscape, #Adds landscape data
 )
 str(datalist)
 
-#Run model
+#Anthophora model
 library(beepr)
-modGP = stan(file='gpMod1.stan',data=datalist,warmup=750,iter=1500,chains=3,
+modGP = stan(file='gpMod1.stan',data=datalist,iter=5000,chains=4,
              control=list(adapt_delta=0.9))
 beep(1)
 
@@ -1322,11 +1251,16 @@ pars=c('rho','alpha','sigma','b0','b0sd','SNLslope','slopeLastYear','slopeCanola
 print(modGP,pars=pars)
 traceplot(modGP,pars=pars)
 plot(modGP,pars=pars)
-pairs(modGP,pars=pars[c(1:3,10)]) #GP parameters, phi
-pairs(modGP,pars=pars[c(4:5)]) #Yearly intercept and random effects
-pairs(modGP,pars=pars[c(6:7)]) #SNL slopes and yearly carryover - SNL effects are correlated
-pairs(modGP,pars=pars[c(8:9)]) 
+pairs(modGP,pars=pars[c(1:3,10)]) #GP parameters, phi - OK
+pairs(modGP,pars=pars[c(4:5)]) #Yearly intercept and random effects - OK
+pairs(modGP,pars=pars[c(6:9)]) #SNL slopes and yearly carryover - SNL effects are correlated, but I think this is OK
 
+
+#Priors vs Posterior for b0sd parameters
+b0samps <- extract(modGP,pars=c('b0sd'))
+par(mfrow=c(2,1)) 
+curve(MCMCpack::dinvgamma(x,2,0.75),0,max(sapply(b0samps,max)),ylab='Freq')
+hist(b0samps[[1]],breaks=30,xlim=c(0,max(sapply(b0samps,max))),main='Posterior for b0sd[1]')
 
 pars=c('muCanola','sigmaCanola','ampCanola','residCanola') #OK
 print(modGP,pars=pars)
@@ -1334,31 +1268,27 @@ traceplot(modGP,pars=pars)
 pairs(modGP,pars=pars)
 plot(modGP,pars=pars)
 
-#Plot canola bloom
-with(datalist,data.frame(canolaBloom=canolaBloom,centEndDate=centBloomDate,nearCanola=nearCanola,
-                         year=year[bloomIndex],BLID=site[bloomIndex])) %>%
-  filter(nearCanola==1) %>% 
-  ggplot(aes(centEndDate,canolaBloom,col=factor(year),group=BLID))+
-  geom_point()+geom_smooth(aes(group=year))
+# #Plot canola bloom
+# with(datalist,data.frame(canolaBloom=canolaBloom,centEndDate=centBloomDate,nearCanola=nearCanola,
+#                          year=year[bloomIndex],BLID=site[bloomIndex])) %>%
+#   filter(nearCanola==1) %>% 
+#   ggplot(aes(centEndDate,canolaBloom,col=factor(year),group=BLID))+
+#   geom_point()+geom_smooth(aes(group=year))
 
-print(modGP,pars='siteCanolaLims') #OK
-traceplot(modGP,pars='siteCanolaLims') 
-print(modGP,pars='siteCanolaOverlap') 
-print(modGP,pars='predCanolaPass') 
+# print(modGP,pars='siteCanolaLims') #OK
+# traceplot(modGP,pars='siteCanolaLims') 
+# print(modGP,pars='siteCanolaOverlap') 
+# print(modGP,pars='predCanolaPass') 
 
-print(modGP,pars=c('b0err'))
-
-pairs(modGP,pars=c('rho[1]','alpha[1]','sigma'))
-pairs(modGP,pars=c('rho[2]','alpha[2]','sigma'))
 launch_shinystan(modGP)
 
-#Plot of population between years (from data)
-ggplot(temp,aes(midDate,count,col=factor(year),group=paste(year,BLID,replicate)))+
-  geom_point()+geom_line()+facet_wrap(~BLID)+
-  scale_y_sqrt()+labs(col='Year')
-
-ggplot(temp,aes(midDate,count,group=paste(BLID,replicate)))+
-  geom_point()+geom_line()+facet_wrap(~year,ncol=1)
+# #Plot of population between years (from data)
+# ggplot(temp,aes(midDate,count,col=factor(year),group=paste(year,BLID,replicate)))+
+#   geom_point()+geom_line()+facet_wrap(~BLID)+
+#   scale_y_sqrt()+labs(col='Year')
+# 
+# ggplot(temp,aes(midDate,count,group=paste(BLID,replicate)))+
+#   geom_point()+geom_line()+facet_wrap(~year,ncol=1)
 
 modGP_results <- extract(modGP) #Extract values from model
 
@@ -1378,8 +1308,6 @@ with(modGP_results,{
   abline(0,1,lty='dashed');
   par(mfrow=c(1,1));
 })
-
-hist(apply(modGP_results$b0err,2,median)) #Prior distribution of b0err ("random" intercept)
 
 data.frame(year=datalist$year,eta=exp(apply(modGP_results$eta,2,median)),site=datalist$site,
            centDate=datalist$centDate,counts=datalist$count) %>% 
