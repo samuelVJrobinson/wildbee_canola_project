@@ -32,6 +32,7 @@ functions {
 		return xval;
 	}
 } 
+
 data {
 	int N; //Number of data points for both years
 	int Nsite; //Number of sites used in each year
@@ -59,15 +60,16 @@ parameters {
 	vector[N] eta; //Unit normals
 	
 	//Bee count parameters - 1 for each year
+	matrix<lower=0,upper=1>[Nsite,2] occupied; //Is each site occupied during each year?
 	real b0[2]; //"Global intercept" - mean for neg.bin. process			
-	vector[Nsite] b0err; //"Error" for site intercept (random effect of site)
+	vector<lower=0>[Nsite] b0err; //"Error" for site intercept (random effect of site)
 	real<lower=0> b0sd; //SD for generating site error
 	real SNLslope[2]; //SNL effect on site intercept
 	real slopeLastYear; //Effect of last year on site intercept	
 	//real intLastYear; //Interaction between SNL and last year's intercept
 	real slopeCanolaOverlap; //Effect of last year's canola overlap on this year's abundance	
 	real canolaEffect[2]; //Effect of canola abundance on per-pass bee count
-	real<lower=0> phi; //Dispersion parameter for neg. bin.
+	real<lower=0> phi[2]; //Dispersion parameter for neg. bin.
 	
 	//Canola bloom parameters - 1 for each year
 	real muCanola[2]; //Peak bloom time
@@ -94,18 +96,14 @@ transformed parameters {
 	siteCanolaLims[1,]=invGaus(10,muCanola[1],sigmaCanola[1],100)'; //Year 1
 	siteCanolaLims[2,]=invGaus(10,muCanola[2],sigmaCanola[2],100)'; // Year 2
 	
-	for(i in 1:N){
-			if(year[i]==2015){  					
-			//Calculate canola overlap for pass = %canola2015 x overlap		
-			predCanolaPass[i]= max([min([siteCanolaLims[1,1],centEndDate[i]])-max([siteCanolaLims[1,2],centEndDate[i]-traplength[i]]),0])/traplength[i]*
-				percCanola[site[i],1]; 				
-			//Add overlap to siteCanolaOverlap if year == 2015
+	for(i in 1:N){			  					
+		//Calculate canola overlap for pass = %canola2015 x overlap		
+		predCanolaPass[i]= max([min([siteCanolaLims[year[i],1],centEndDate[i]])-max([siteCanolaLims[year[i],2],centEndDate[i]-traplength[i]]),0])/
+			traplength[i]*percCanola[site[i],1]; 				
+		//Add overlap to siteCanolaOverlap if year == 2015
+		if(year[i]==1){
 			siteCanolaOverlap[site[i]]=siteCanolaOverlap[site[i]]+predCanolaPass[i];
-		} else {
-			//Calculate canola overlap for pass = %canola2016 x overlap
-			predCanolaPass[i]= max([min([siteCanolaLims[2,1],centEndDate[i]])-max([siteCanolaLims[2,2],centEndDate[i]-traplength[i]]),0])/traplength[i]*
-				percCanola[site[i],2]; 
-		}
+		}		
 	}
 	
 	/* Model for per-site bee counts (intercepts)
@@ -115,7 +113,7 @@ transformed parameters {
 
 	//Site intercept 2015	
 	b0site[,1]= SNLslope[1]*percSNL + //Effect of SNL ("Long-term" effect)			 
-				b0err;  //Random effect of site
+				(b0err-(1/b0sd));  //Random effect of site (centralized gamma)
 	// Site intercept 2016 = Effect of SNL + Effect of 2015 + Interaction
 	b0site[,2]= slopeLastYear*(b0site[,1]) + //Effect of last year's intercept (population)
 				SNLslope[2]*percSNL + //Effect of SNL ("year-to-year" effect)
@@ -153,17 +151,20 @@ transformed parameters {
 		Clunky, but no vectorized form of pow(), so this is as good as it gets
 	*/
 	for(i in 1:Ncanola){ 
-		if(nearCanola[i]==1){
-			if(year[bloomIndex[i]]==2015){ 
-				predCanola[i]=ampCanola[1]*exp(-0.5*pow((centBloomDate[i]-muCanola[1])/sigmaCanola[1],2));
-			} else {
-				predCanola[i]=ampCanola[2]*exp(-0.5*pow((centBloomDate[i]-muCanola[2])/sigmaCanola[2],2));
-			}			
+		if(nearCanola[i]==1){			 
+			predCanola[i]=ampCanola[year[bloomIndex[i]]]*
+				exp(-0.5*pow((centBloomDate[i]-muCanola[year[bloomIndex[i]]])/sigmaCanola[year[bloomIndex[i]]],2));			
 		} 
 	}	
 }
 
 model {  			
+	vector[N] phiVector = rep_vector(phi[1],N); //Assign phi[1] and phi[2] to a vector
+	for(i in 1:N){
+		if(year[i]==2){
+			phiVector[i]=phi[2];
+		}
+	}	
 	
 	//Priors	
 	//Gaussian process - 1 for each year
@@ -174,8 +175,10 @@ model {
 	
 	//Bee counts for each site - 1 for each year
 	b0 ~ normal(0,5); //Hyperprior for the site mean ("global intercept")	
-	b0sd ~ inv_gamma(2,0.75); //Hyperprior for site SD		
-	b0err ~ normal(0,b0sd);	
+	// b0sd ~ inv_gamma(2,0.75); //Hyperprior for site SD		
+	// b0err ~ normal(0,b0sd);	
+	b0sd ~ gamma(1.5,1); //Hyperprior for gamma term - non-normal random effect
+	b0err ~ gamma(1,b0sd);	
 	
 	SNLslope ~ normal(0,3); //Prior for effect of SNL		
 	slopeLastYear ~ normal(0,3); //Effect of last year's intercept
@@ -189,14 +192,15 @@ model {
 	ampCanola ~ normal(100,20); //Amplitude of bloom
 	residCanola ~ gamma(1,1); //"Residual"
 		
-	//Likelihood	
-	count ~ neg_binomial_2_log(mu+log(traplength),phi);	//Count data along with trapping offset
-	canolaBloom ~ normal(predCanola,residCanola);	
+	//Likelihood		
+	canolaBloom ~ normal(predCanola,residCanola);		
+	//count ~ neg_binomial_2_log(mu+log(traplength),phiVector);	//Count data along with trapping offset
+	target += neg_binomial_2_lpmf(count|exp(mu+log(traplength)), phiVector);	
 }
 
 generated quantities {	
 	int<lower=0> predCounts[N]; //Predicted counts
 	
 	for(i in 1:N)		
-		predCounts[i]=neg_binomial_2_log_rng(mu[i]+log(traplength[i]),phi);			
+		predCounts[i]=neg_binomial_2_log_rng(mu[i]+log(traplength[i]),phi[year[i]]);			
 }

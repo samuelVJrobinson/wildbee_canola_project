@@ -1147,7 +1147,7 @@ detach("package:jagsUI", unload=TRUE)
 #Single-year model of wild bees - test using Stan ---------------
 library("rstan")
 rstan_options(auto_write = TRUE)
-options(mc.cores = 4)
+options(mc.cores = 3)
 setwd("~/Projects/UofC/wildbee_canola_project/models")
 library(shinystan)
 
@@ -1218,9 +1218,10 @@ datalist=with(temp, #Data to feed into STAN
                 Nsite=length(unique(BLID)), #Number of sites
                 Ncanola=sum(!is.na(canolaBloom)), #Number of observed canola measurements
                 site=as.numeric(BLID), #site index
-                year=year, #Year of observation
+                year=temp$year-min(temp$year)+1, #Year of observation
                 NperSite=matrix(aggregate(pass~BLID+year,data=temp,length)$pass,ncol=2), #Number of obs per site per year
-                count=Anthophora_terminalis, #Anthophora count
+                #count=Anthophora_terminalis, #Anthophora count
+                count=Dufourea_maura,
                 traplength=traplength, #offset (in weeks)
                 centStartDate=centEndDate-traplength, #Start date
                 centDate=centDate, #Centered date (between start and end)
@@ -1240,10 +1241,11 @@ datalist=c(datalist,with(landscape, #Adds landscape data
 )
 str(datalist)
 
-#Anthophora model
+#Anthophora model - OK
+#Dufourea model - actual:predicted line < 1:1
 library(beepr)
-modGP = stan(file='gpMod1.stan',data=datalist,iter=5000,chains=4,
-             control=list(adapt_delta=0.9))
+modGP = stan(file='gpMod1.stan',data=datalist,iter=500,chains=1,
+             control=list(adapt_delta=0.8))
 beep(1)
 
 #Looks good. Next step is to get a better method for estimating rho, alpha, sigma. Try out model without random effect for each term to see if it improves model fit
@@ -1253,8 +1255,7 @@ traceplot(modGP,pars=pars)
 plot(modGP,pars=pars)
 pairs(modGP,pars=pars[c(1:3,10)]) #GP parameters, phi - OK
 pairs(modGP,pars=pars[c(4:5)]) #Yearly intercept and random effects - OK
-pairs(modGP,pars=pars[c(6:9)]) #SNL slopes and yearly carryover - SNL effects are correlated, but I think this is OK
-
+pairs(modGP,pars=pars[c(6:7)]) #SNL slopes and yearly carryover - SNL effects are correlated, but I think this is OK
 
 #Priors vs Posterior for b0sd parameters
 b0samps <- extract(modGP,pars=c('b0sd'))
@@ -1282,25 +1283,37 @@ plot(modGP,pars=pars)
 
 launch_shinystan(modGP)
 
-# #Plot of population between years (from data)
-# ggplot(temp,aes(midDate,count,col=factor(year),group=paste(year,BLID,replicate)))+
-#   geom_point()+geom_line()+facet_wrap(~BLID)+
-#   scale_y_sqrt()+labs(col='Year')
-# 
-# ggplot(temp,aes(midDate,count,group=paste(BLID,replicate)))+
-#   geom_point()+geom_line()+facet_wrap(~year,ncol=1)
+#Plot of population between years (from data)
+ggplot(temp,aes(midDate,Anthophora_terminalis,col=factor(year),group=paste(year,BLID,replicate)))+
+  geom_point()+geom_line()+facet_wrap(~BLID)+
+  scale_y_sqrt()+labs(col='Year')
+
+ggplot(temp,aes(midDate,Dufourea_maura,col=factor(year),group=paste(year,BLID,replicate)))+
+  geom_point(aes(shape=canolaBloom>0))+geom_line()+facet_wrap(~BLID)+
+  scale_y_sqrt()+labs(col='Year')
+
+ggplot(temp,aes(midDate,Dufourea_maura,group=paste(BLID,replicate)))+
+  geom_point()+geom_line()+facet_wrap(~year,ncol=1)
 
 modGP_results <- extract(modGP) #Extract values from model
 
+#Posterior predictive checks
+data.frame(actual=datalist$count,predicted=apply(modGP_results$predCounts,2,median)) %>% 
+  ggplot(aes(predicted,actual))+
+  geom_point(position=position_jitter(height=0.1,width=0.1))+
+  geom_abline(intercept=0,slope=1)
+
 with(modGP_results,{ #Prior vs Posterior for b0sd
-  par(mfrow=c(2,1))
-  curve(MCMCpack::dinvgamma(x,2,1),min(b0sd),max(b0sd),main='Prior',ylab='Frequency',xlab='b0sd')
-  hist(b0sd,main='Posterior')
+  par(mfrow=c(1,1))
+  hist(b0sd,main=NA)
+  par(new=T)
+  curve(MCMCpack::dinvgamma(x,2,1),min(b0sd),max(b0sd),main='Prior',ylab='Frequency',xlab='b0sd',col='red',axes=F)
 })
 
 with(modGP_results,{
   par(mfrow=c(3,1)); #Plot b0site results
   year2015 <- apply(b0site[,,1],2,median);
+  
   year2016 <- apply(b0site[,,2],2,median);
   hist(year2015,main='b0 2015');
   hist(year2016,main='b0 2016');
@@ -1309,6 +1322,7 @@ with(modGP_results,{
   par(mfrow=c(1,1));
 })
 
+#Plots of eta values
 data.frame(year=datalist$year,eta=exp(apply(modGP_results$eta,2,median)),site=datalist$site,
            centDate=datalist$centDate,counts=datalist$count) %>% 
   gather('type','measurement',eta,counts) %>% 
