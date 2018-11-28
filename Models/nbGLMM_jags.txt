@@ -7,6 +7,10 @@
 #	vary according to some distribution. Given a particular realization from this distribution, say, the resulting
 #	random variable X will have a Poisson distribution with lambda=lambda. 
 #https://www.unc.edu/courses/2008fall/ecol/563/001/docs/lectures/lecture14.htm
+# Alternatively, it is possible to transform lambda to be used in a "traditional" negative binomial formula that JAGS uses:
+#e.g. p <- theta/(theta+exp(lambda)); x ~ dnegbin(p,theta);
+#https://georgederpa.github.io/teaching/countModels.html
+
 model {
   
   #Hyperpriors

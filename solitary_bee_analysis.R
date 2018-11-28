@@ -5,6 +5,7 @@
 library(ggplot2)
 library(dplyr)
 library(tidyr)
+library(beepr)
 
 #ggplot theme
 prestheme=theme(legend.position='right',
@@ -193,6 +194,22 @@ trap[trap$BLID==15208 & trap$year==2015 & trap$pass==1,'canolaBloom'] <- NA
 trap[trap$BLID==20001 & trap$year==2015 & trap$pass==1,'canolaBloom'] <- NA
 trap[trap$BLID==10781 & trap$year==2015 & trap$pass==2,'canolaBloom'] <- NA
 trap[trap$BLID==14376 & trap$year==2016 & (trap$pass==1|trap$pass==3),'canolaBloom'] <- NA
+
+#Convenience functions
+
+#Posterior predictive check plots
+PPplots <- function(resid,predResid,actual,pred,main=NULL){
+  par(mfrow=c(2,1))
+  plot(resid,predResid,xlab='Sum residuals',ylab='Sum simulated residuals',main=main)
+  x <- sum(resid<predResid)/length(resid)
+  legend('topleft',paste('p =',round(min(x,1-x),3)))
+  abline(0,1,col='red') #PP plot
+  plot(actual,pred, #Predicted vs Actual - good
+       ylab=paste('Predicted',main),xlab=paste('Actual',main)) 
+  abline(0,1,col='red')
+  par(mfrow=c(1,1))
+}
+
 
 # Basic abundance plots ---------------------------------------------------
 
@@ -1147,7 +1164,7 @@ detach("package:jagsUI", unload=TRUE)
 #Single-year model of wild bees - test using Stan ---------------
 library("rstan")
 rstan_options(auto_write = TRUE)
-options(mc.cores = 3)
+options(mc.cores = 4)
 setwd("~/Projects/UofC/wildbee_canola_project/models")
 library(shinystan)
 
@@ -1215,6 +1232,7 @@ temp=group_by(top4bees,genSpp,BLID,pass,replicate,year) %>% #Abundance by date &
 datalist=with(temp, #Data to feed into STAN
               list(
                 N=nrow(temp), #Number of total samples
+                NperYear=unname(tapply(year,year,length)), #Number of samples per year
                 Nsite=length(unique(BLID)), #Number of sites
                 Ncanola=sum(!is.na(canolaBloom)), #Number of observed canola measurements
                 site=as.numeric(BLID), #site index
@@ -1244,14 +1262,14 @@ str(datalist)
 #Anthophora model - OK
 #Dufourea model - actual:predicted line < 1:1
 library(beepr)
-modGP = stan(file='gpMod1.stan',data=datalist,iter=500,chains=1,
+modGP = stan(file='gpMod1.stan',data=datalist,iter=200,chains=4,
              control=list(adapt_delta=0.8))
-beep(1)
-
+save(modGP,file='modGP1.Rdata')
 #Looks good. Next step is to get a better method for estimating rho, alpha, sigma. Try out model without random effect for each term to see if it improves model fit
 pars=c('rho','alpha','sigma','b0','b0sd','SNLslope','slopeLastYear','slopeCanolaOverlap','canolaEffect','phi')
 print(modGP,pars=pars)
 traceplot(modGP,pars=pars)
+stan_hist(modGP,pars=pars)
 plot(modGP,pars=pars)
 pairs(modGP,pars=pars[c(1:3,10)]) #GP parameters, phi - OK
 pairs(modGP,pars=pars[c(4:5)]) #Yearly intercept and random effects - OK
@@ -1269,6 +1287,21 @@ traceplot(modGP,pars=pars)
 pairs(modGP,pars=pars)
 plot(modGP,pars=pars)
 
+#Get coefficients from model
+mod1 <- extract(modGP)
+
+#Plot of GP trends
+data.frame(date=datalist$centDate,site=datalist$site,trend=apply(mod1$gpTrend,2,mean),year=datalist$year) %>% 
+  ggplot(aes(date,trend))+geom_point()+
+  geom_line(aes(group=site))+
+  facet_wrap(~year)
+
+with(mod1,PPplots(apply(count_resid,1,function(x) sum(abs(x))),
+                  apply(predCount_resid,1,function(x) sum(abs(x))),
+                  datalist$count,exp(apply(mu,2,median))))
+
+     
+
 # #Plot canola bloom
 # with(datalist,data.frame(canolaBloom=canolaBloom,centEndDate=centBloomDate,nearCanola=nearCanola,
 #                          year=year[bloomIndex],BLID=site[bloomIndex])) %>%
@@ -1281,7 +1314,7 @@ plot(modGP,pars=pars)
 # print(modGP,pars='siteCanolaOverlap') 
 # print(modGP,pars='predCanolaPass') 
 
-launch_shinystan(modGP)
+# launch_shinystan(modGP)
 
 #Plot of population between years (from data)
 ggplot(temp,aes(midDate,Anthophora_terminalis,col=factor(year),group=paste(year,BLID,replicate)))+
