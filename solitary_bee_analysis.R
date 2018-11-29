@@ -1229,7 +1229,7 @@ temp=group_by(top4bees,genSpp,BLID,pass,replicate,year) %>% #Abundance by date &
 
 
 #Gaussian process model
-datalist=with(temp, #Data to feed into STAN
+datalist <- with(temp, #Data to feed into STAN
               list(
                 N=nrow(temp), #Number of total samples
                 NperYear=unname(tapply(year,year,length)), #Number of samples per year
@@ -1238,9 +1238,15 @@ datalist=with(temp, #Data to feed into STAN
                 site=as.numeric(BLID), #site index
                 year=temp$year-min(temp$year)+1, #Year of observation
                 NperSite=matrix(aggregate(pass~BLID+year,data=temp,length)$pass,ncol=2), #Number of obs per site per year
-                #count=Anthophora_terminalis, #Anthophora count
+                count=Anthophora_terminalis, #Anthophora count
                 count=Dufourea_maura,
                 traplength=traplength, #offset (in weeks)
+                Ndates2015=length(unique(centDate[year==2015])),
+                Ndates2016=length(unique(centDate[year==2016])),
+                centDates2015=unique(sort(centDate[year==2015])), #unique dates for 2015
+                centDates2016=sort(unique(centDate[year==2016])), #unique dates for 2016
+                dateIndex2015=match(centDate[year==2015],sort(unique(centDate[year==2015]))), #Index for 2015 dates
+                dateIndex2016=match(centDate[year==2016],sort(unique(centDate[year==2016]))), #Index for 2016 dates 
                 centStartDate=centEndDate-traplength, #Start date
                 centDate=centDate, #Centered date (between start and end)
                 centEndDate=centEndDate, #End date
@@ -1259,43 +1265,79 @@ datalist=c(datalist,with(landscape, #Adds landscape data
 )
 str(datalist)
 
+#Initial values
+inits <- function() { with(datalist,
+   list(rho=c(1.7,0.8),alpha=c(1.2,0.8),b0=c(-1.8,-2.1),b0_site=matrix(rep(0,Nsite*2),nrow=Nsite),
+        sigma_site=c(0.7,0.4),SNLslope=c(0.9,0),slopeLastYear=0.6,slopeCanolaOverlap=-0.3,
+        canolaEffect=c(-0.15,0.13),phi=c(1.5,0.9),
+        muDateCanola=c(-2,-1),sigmaDateCanola=c(1.5,1.5),ampCanola=c(75,97)
+   ))
+}
+
+
+
+with(datalist,data.frame(dates=centDate,count,year,site)) %>% 
+  ggplot(aes(dates,count))+geom_point()+geom_line(aes(group=site))+facet_wrap(~year)+
+  scale_y_log10()
+
+
 #Anthophora model - OK
 #Dufourea model - actual:predicted line < 1:1
-library(beepr)
-modGP = stan(file='gpMod1.stan',data=datalist,iter=200,chains=4,
-             control=list(adapt_delta=0.8))
-save(modGP,file='modGP1.Rdata')
-#Looks good. Next step is to get a better method for estimating rho, alpha, sigma. Try out model without random effect for each term to see if it improves model fit
-pars=c('rho','alpha','sigma','b0','b0sd','SNLslope','slopeLastYear','slopeCanolaOverlap','canolaEffect','phi')
-print(modGP,pars=pars)
-traceplot(modGP,pars=pars)
+modGP <- stan(file='gpMod1.stan',data=datalist,iter=500,chains=3,control=list(adapt_delta=0.8),init=inits)
+beep(1)
+# save(modGP,file='anthophora_terminalis_mod.Rdata')
+
+# #Try model for Dufourea
+# datalist$count <- temp$Dufourea_maura
+# modGP <- stan(file='gpMod1.stan',data=datalist,iter=500,chains=3,control=list(adapt_delta=0.8),init=inits)
+# save(modGP,file='dufourea_maura_mod.Rdata')
+
+#Model for Lasioglossum
+datalist$count <- temp$Lasioglossum_leucozonium
+modGP <- stan(file='gpMod1.stan',data=datalist,iter=500,chains=3,control=list(adapt_delta=0.8),init=inits)
+save(modGP,file='lasioglossum_leucozonium_mod.Rdata')
+
+#Model for Melissodes
+datalist$count <- temp$Melissodes_confusus
+modGP <- stan(file='gpMod1.stan',data=datalist,iter=500,chains=3,control=list(adapt_delta=0.8),init=inits)
+save(modGP,file='melissodes_confusus_mod.Rdata')
+
+pars=c('rho','alpha','b0','sigma_site','SNLslope','slopeLastYear','slopeCanolaOverlap','canolaEffect','phi')
+# pars=c('muCanola','sigmaCanola','ampCanola','residCanola') #OK
 stan_hist(modGP,pars=pars)
-plot(modGP,pars=pars)
-pairs(modGP,pars=pars[c(1:3,10)]) #GP parameters, phi - OK
-pairs(modGP,pars=pars[c(4:5)]) #Yearly intercept and random effects - OK
-pairs(modGP,pars=pars[c(6:7)]) #SNL slopes and yearly carryover - SNL effects are correlated, but I think this is OK
 
-#Priors vs Posterior for b0sd parameters
-b0samps <- extract(modGP,pars=c('b0sd'))
-par(mfrow=c(2,1)) 
-curve(MCMCpack::dinvgamma(x,2,0.75),0,max(sapply(b0samps,max)),ylab='Freq')
-hist(b0samps[[1]],breaks=30,xlim=c(0,max(sapply(b0samps,max))),main='Posterior for b0sd[1]')
-
-pars=c('muCanola','sigmaCanola','ampCanola','residCanola') #OK
-print(modGP,pars=pars)
-traceplot(modGP,pars=pars)
-pairs(modGP,pars=pars)
-plot(modGP,pars=pars)
+# traceplot(modGP,pars=pars)
+# print(modGP,pars=pars)
+# plot(modGP,pars=pars)
 
 #Get coefficients from model
 mod1 <- extract(modGP)
 
-#Plot of GP trends
-data.frame(date=datalist$centDate,site=datalist$site,trend=apply(mod1$gpTrend,2,mean),year=datalist$year) %>% 
-  ggplot(aes(date,trend))+geom_point()+
-  geom_line(aes(group=site))+
-  facet_wrap(~year)
+#Faster Pairplots
+pairs(mod1[c(pars,'lp__')],lower.panel=function(x,y){
+  par(usr=c(0,1,0,1))
+  text(0.5, 0.5, round(cor(x,y),2), cex = 1 * exp(abs(cor(x,y))))})
 
+#Plot of random intercepts
+t(apply(mod1$b0_site[,,2],2,function(x) quantile(x,c(0.5,0.975,0.025)))) %>%
+  as.data.frame() %>% rename(median='50%',upr='97.5%',lwr='2.5%') %>% arrange(median) %>%
+  mutate(row=1:nrow(.)) %>% 
+  # ggplot(aes(row,median))+geom_pointrange(aes(ymax=upr,ymin=lwr))+geom_hline(yintercept=0,col='red')
+  ggplot(aes(row,median))+geom_pointrange(aes(ymax=upr,ymin=lwr))+
+    geom_hline(yintercept=exp((mean(mod1$sigma_site[,2])^2)/2),col='red')
+  # ggplot(aes(sample=log(median+abs(min(median)))))+geom_qq()+geom_qq_line() #Normal QQ plot
+  # ggplot(aes(x=median))+geom_histogram()
+
+#Plot of GP trends
+with(datalist,data.frame(date=c(centDates2015,centDates2016),
+                         pred=c(apply(mod1$gpTrend2015,2,mean),apply(mod1$gpTrend2016,2,mean)),
+                         lwr=c(apply(mod1$gpTrend2015,2,quantile,0.1),apply(mod1$gpTrend2016,2,quantile,0.1)),
+                         upr=c(apply(mod1$gpTrend2015,2,quantile,0.9),apply(mod1$gpTrend2016,2,quantile,0.9)),
+                         year=c(rep(2015,Ndates2015),rep(2016,Ndates2016)))) %>% 
+  ggplot(aes(date,pred))+geom_ribbon(aes(ymax=upr,ymin=lwr),alpha=0.3)+
+  geom_line(size=1)+facet_wrap(~year)
+
+#PP plots for bee counts - looks OK
 with(mod1,PPplots(apply(count_resid,1,function(x) sum(abs(x))),
                   apply(predCount_resid,1,function(x) sum(abs(x))),
                   datalist$count,exp(apply(mu,2,median))))
