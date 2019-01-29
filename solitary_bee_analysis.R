@@ -197,6 +197,15 @@ trap[trap$BLID==14376 & trap$year==2016 & (trap$pass==1|trap$pass==3),'canolaBlo
 
 #Convenience functions
 
+logit <- function(x){
+  return(log(x/(1-x)))
+}
+invLogit <- function(x){ 
+  i <- exp(x)/(1+exp(x)) 
+  i[is.nan(i)] <- 1 #If x is large enough, becomes Inf/Inf = NaN, but Lim(invLogit) x->Inf = 1
+  return(i)
+}
+
 #Posterior predictive check plots
 PPplots <- function(resid,predResid,actual,pred,main=NULL){
   par(mfrow=c(2,1))
@@ -209,6 +218,8 @@ PPplots <- function(resid,predResid,actual,pred,main=NULL){
   abline(0,1,col='red')
   par(mfrow=c(1,1))
 }
+
+
 
 
 # Basic abundance plots ---------------------------------------------------
@@ -1168,8 +1179,8 @@ options(mc.cores = 4)
 setwd("~/Projects/UofC/wildbee_canola_project/models")
 library(shinystan)
 
-#Names of top4 wild spp
-top4=filter(bees,BLID %in% year2year,!agricultural)  %>%
+#Names of top 20 wild spp
+top20=filter(bees,BLID %in% year2year,!agricultural)  %>%
   mutate(year=paste0('y',year)) %>%
   group_by(year,genSpp) %>%
   summarize(number=n()) %>%
@@ -1178,39 +1189,39 @@ top4=filter(bees,BLID %in% year2year,!agricultural)  %>%
   filter(notZero) %>% #Filter years with zero in one year
   filter((diff/total)<0.5) %>% #Filter sp where magnitude of yearly difference is less than 50% of total count
   arrange(desc(total)) %>%
-  top_n(4,total) %>%
+  top_n(20,total) %>%
   .$genSpp
 
-#Occurance data for top 4 bees
-top4bees=filter(bees,BLID %in% year2year) %>%
-  filter(genSpp %in% top4)
+#Occurance data for top 20 bees
+top20bees <- filter(bees,BLID %in% year2year) %>%
+  filter(genSpp %in% top20)
 
 #Trapping occurance data (start and end of passes)
-passes=trap %>%
+passes <- trap %>%
   select(BLID,pass,replicate,year,startDate,midDate,endDate,canolaBloom) %>%
   distinct() %>%
   unite(ID,BLID:year,remove=F) %>%
   arrange(year,BLID,pass)
 
 #Anthophora model 
-temp=group_by(top4bees,genSpp,BLID,pass,replicate,year) %>% #Abundance by date & trap
-  summarize(count=n()) %>%
-  unite(ID,BLID:year) %>%
-  spread(genSpp,count) %>%
-  full_join(passes,by='ID') %>%
-  gather('genSpp','count',2:5) %>%
+temp <- group_by(top20bees,genSpp,BLID,pass,replicate,year) %>% #Abundance by date & trap
+  summarize(count=n()) %>% ungroup() %>% 
+  mutate(genSpp=factor(gsub(' ','_',genSpp))) %>% 
+  unite(ID,BLID:year) %>% 
+  spread(genSpp,count) %>%  
+  full_join(passes,by='ID') %>% 
+  gather('genSpp','count',contains("_")) %>% 
   mutate(count=ifelse(is.na(count),0,count)) %>% #Changes NAs to zeros
-  select(-ID) %>%
+  select(-ID) %>% 
   mutate(BLID=factor(BLID)) %>%
   arrange(genSpp,year,BLID,pass) %>%
-  mutate(genSpp=factor(gsub(' ','_',genSpp))) %>% 
   spread(genSpp,count) %>% 
   mutate(traplength=(endDate-startDate)/7) %>% #Trapping period (in weeks)
   mutate(centDate=(midDate-mean(midDate))/7) %>%  #Centers midDate and converts to week
   mutate(centEndDate=(endDate-mean(midDate))/7) %>%  #Centers endDate and coverts to week
   group_by(year,BLID) %>% 
-  mutate(nearCanola=any(canolaBloom>0)) #Was canola bloom recorded at that site?
-
+  mutate(nearCanola=any(canolaBloom>0))  #Was canola bloom recorded at that site?
+  
 # Year-to-year landscape proportions (at different radii)
 # landscape %>% 
 #   select(-contains('Canola')) %>% 
@@ -1239,7 +1250,9 @@ datalist <- with(temp, #Data to feed into STAN
                 year=temp$year-min(temp$year)+1, #Year of observation
                 NperSite=matrix(aggregate(pass~BLID+year,data=temp,length)$pass,ncol=2), #Number of obs per site per year
                 count=Anthophora_terminalis, #Anthophora count
-                count=Dufourea_maura,
+                # count=Dufourea_maura,
+                # count=Melissodes_confusus,
+                # count=Lasioglossum_leucozonium,
                 traplength=traplength, #offset (in weeks)
                 Ndates2015=length(unique(centDate[year==2015])),
                 Ndates2016=length(unique(centDate[year==2016])),
@@ -1267,66 +1280,144 @@ str(datalist)
 
 #Initial values
 inits <- function() { with(datalist,
-   list(rho=c(1.7,0.8),alpha=c(1.2,0.8),b0=c(-1.8,-2.1),b0_site=matrix(rep(0,Nsite*2),nrow=Nsite),
-        sigma_site=c(0.7,0.4),SNLslope=c(0.9,0),slopeLastYear=0.6,slopeCanolaOverlap=-0.3,
+   list(rho=c(1.7,0.8),alpha=c(1.2,0.8),b0=c(-1.8,-2.1),b0_site=rep(0,Nsite*1),
+        sigma_site=c(0.7),SNLslope=c(0.9,0),slopeLastYear=0.6,slopeCanolaOverlap=-0.3,
         canolaEffect=c(-0.15,0.13),phi=c(1.5,0.9),
         muDateCanola=c(-2,-1),sigmaDateCanola=c(1.5,1.5),ampCanola=c(75,97)
    ))
 }
 
+# with(datalist,data.frame(dates=centDate,count,year,site)) %>% 
+#   ggplot(aes(dates,count))+geom_point()+geom_line(aes(group=site))+facet_wrap(~year)+
+#   scale_y_log10()
 
+#Overall model
+datalist$count <- rowSums(temp[,c(9:28)])
+modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
+save(modGP,file='overall_mod.Rdata')
 
-with(datalist,data.frame(dates=centDate,count,year,site)) %>% 
-  ggplot(aes(dates,count))+geom_point()+geom_line(aes(group=site))+facet_wrap(~year)+
-  scale_y_log10()
+#Anthophora terminalis model - OK
+datalist$count <- temp$Anthophora_terminalis
+modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
+save(modGP,file='anthophora_terminalis_mod.Rdata')
+#Model for Dufourea maura - predictions look bad
+datalist$count <- temp$Dufourea_maura
+modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
+save(modGP,file='dufourea_maura_mod.Rdata')
 
-
-#Anthophora model - OK
-#Dufourea model - actual:predicted line < 1:1
-modGP <- stan(file='gpMod1.stan',data=datalist,iter=500,chains=3,control=list(adapt_delta=0.8),init=inits)
-beep(1)
-# save(modGP,file='anthophora_terminalis_mod.Rdata')
-
-# #Try model for Dufourea
-# datalist$count <- temp$Dufourea_maura
-# modGP <- stan(file='gpMod1.stan',data=datalist,iter=500,chains=3,control=list(adapt_delta=0.8),init=inits)
-# save(modGP,file='dufourea_maura_mod.Rdata')
-
-#Model for Lasioglossum
+#Model for Lasioglossum leucozonium - OK
 datalist$count <- temp$Lasioglossum_leucozonium
-modGP <- stan(file='gpMod1.stan',data=datalist,iter=500,chains=3,control=list(adapt_delta=0.8),init=inits)
+modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
 save(modGP,file='lasioglossum_leucozonium_mod.Rdata')
+# load('lasioglossum_leucozonium_mod.Rdata')
 
-#Model for Melissodes
+#Model for Melissodes confusus - predictions look bad, PP checks marginal
 datalist$count <- temp$Melissodes_confusus
-modGP <- stan(file='gpMod1.stan',data=datalist,iter=500,chains=3,control=list(adapt_delta=0.8),init=inits)
+modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
 save(modGP,file='melissodes_confusus_mod.Rdata')
 
-pars=c('rho','alpha','b0','sigma_site','SNLslope','slopeLastYear','slopeCanolaOverlap','canolaEffect','phi')
+#Model for Megachile perihirta - OK
+datalist$count <- temp$Megachile_perihirta
+modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
+save(modGP,file='megachile_perihirta_mod.Rdata')
+
+#Model for Lasioglossum dialictus_sp1 - predictions look bad
+datalist$count <- temp$Lasioglossum_dialictus_sp1
+modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
+save(modGP,file='lasioglossum_dialictus_sp1_mod.Rdata')
+
+#Model for Hylaeus hylaeus_sp9 - predictions look bad
+datalist$count <- temp$Hylaeus_hylaeus_sp9
+modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
+save(modGP,file='hylaeus_hylaeus_sp9_mod.Rdata')
+
+#Model for Anthophora occidentalis - predictions look bad
+datalist$count <- temp$Anthophora_occidentalis
+modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
+save(modGP,file='anthophora_occidentalis_mod.Rdata')
+
+#Model for Melissodes rivalis
+datalist$count <- temp$Melissodes_rivalis
+modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
+save(modGP,file='melissodes_rivalis_mod.Rdata')
+
+#Model for Andrena peckhami
+datalist$count <- temp$Andrena_peckhami
+modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
+save(modGP,file='andrena_peckhami_mod.Rdata')
+
+pars=c('rho','alpha','b0','sigma_site','SNLslope','slopeLastYear','slopeCanolaOverlap','canolaEffect','phi','thetaZI')
 # pars=c('muCanola','sigmaCanola','ampCanola','residCanola') #OK
 stan_hist(modGP,pars=pars)
-
 # traceplot(modGP,pars=pars)
-# print(modGP,pars=pars)
-# plot(modGP,pars=pars)
+# print(modGP,pars=pars)# plot(modGP,pars=pars)
 
-#Get coefficients from model
+  
 mod1 <- extract(modGP)
+#PP plots for bee counts - looks OK
+with(mod1,PPplots(apply(count_resid,1,function(x) sum(abs(x))),
+                  apply(predCount_resid,1,function(x) sum(abs(x))),
+                  datalist$count,exp(apply(mu,2,median))))
 
 #Faster Pairplots
 pairs(mod1[c(pars,'lp__')],lower.panel=function(x,y){
   par(usr=c(0,1,0,1))
   text(0.5, 0.5, round(cor(x,y),2), cex = 1 * exp(abs(cor(x,y))))})
 
-#Plot of random intercepts
+#Plot of random intercepts - not really normal, so sigma2 has trouble centering.
 t(apply(mod1$b0_site[,,2],2,function(x) quantile(x,c(0.5,0.975,0.025)))) %>%
   as.data.frame() %>% rename(median='50%',upr='97.5%',lwr='2.5%') %>% arrange(median) %>%
   mutate(row=1:nrow(.)) %>% 
   # ggplot(aes(row,median))+geom_pointrange(aes(ymax=upr,ymin=lwr))+geom_hline(yintercept=0,col='red')
   ggplot(aes(row,median))+geom_pointrange(aes(ymax=upr,ymin=lwr))+
-    geom_hline(yintercept=exp((mean(mod1$sigma_site[,2])^2)/2),col='red')
+    geom_hline(yintercept=0,col='red')
   # ggplot(aes(sample=log(median+abs(min(median)))))+geom_qq()+geom_qq_line() #Normal QQ plot
   # ggplot(aes(x=median))+geom_histogram()
+
+#Partial regression coefficients for year-to-year populations
+load('anthophora_terminalis_mod.Rdata')
+mod1 <- extract(modGP)
+
+tempDat <- with(mod1,data.frame(percSNL=datalist$percSNL,
+                      canolaOverlap=apply(mod1$siteCanolaOverlap,2,median),
+                      year1=apply(mu_site[,,1],2,median),b0site=apply(b0_site,2,median),
+                      year2=apply(mu_site[,,2],2,median))) %>% 
+  mutate(resY2=year2-(median(mod1$SNLslope[,2])*percSNL+ #Residual for year2
+                              median(mod1$slopeCanolaOverlap)*canolaOverlap+
+                              median(mod1$slopeLastYear)*year1)) 
+# #Partial effect of Year 1
+# mutate(tempDat,expY2=(median(mod1$slopeLastYear)*year1+median(mod1$SNLslope[,2])*mean(percSNL)+
+#                                            median(mod1$slopeCanolaOverlap)*mean(canolaOverlap))) %>% 
+mutate(tempDat,expY1=median(mod1$slopeLastYear)*year1) %>% 
+  mutate(upr=sapply(year1,function(x) quantile(mod1$slopeLastYear*x,0.95))) %>%
+  mutate(lwr=sapply(year1,function(x) quantile(mod1$slopeLastYear*x,0.05))) %>% 
+  ggplot(aes(x=year1,y=expY1))+
+  geom_ribbon(aes(ymax=upr,ymin=lwr),alpha=0.3)+
+  geom_line(size=1)+
+  # geom_smooth(method='lm',col='red')+
+  labs(x='Abundance in year 1',y='Abundance in year 2')
+
+#Effect of only SNL
+mutate(tempDat,expY1=median(mod1$SNLslope[,2])*percSNL) %>% 
+  mutate(upr=sapply(percSNL,function(x) quantile(mod1$SNLslope[,2]*x,0.95))) %>%
+  mutate(lwr=sapply(percSNL,function(x) quantile(mod1$SNLslope[,2]*x,0.05))) %>% 
+  arrange(percSNL) %>% 
+  ggplot(aes(x=percSNL,y=expY1))+
+  geom_ribbon(aes(ymax=upr,ymin=lwr),alpha=0.3)+
+  geom_line(size=1)+
+  # geom_smooth(method='lm',col='red')+
+  labs(x='Percent Semi-Natural',y='Abundance in year 2')
+
+#Effect of only canola overlap
+mutate(tempDat,expY1=median(mod1$slopeCanolaOverlap)*canolaOverlap) %>% 
+  mutate(upr=sapply(canolaOverlap,function(x) quantile(mod1$slopeCanolaOverlap*x,0.95))) %>%
+  mutate(lwr=sapply(canolaOverlap,function(x) quantile(mod1$slopeCanolaOverlap*x,0.05))) %>% 
+  arrange(canolaOverlap) %>% 
+  ggplot(aes(x=canolaOverlap,y=expY1))+
+  geom_ribbon(aes(ymax=upr,ymin=lwr),alpha=0.3)+
+  geom_line(size=1)+
+  # geom_smooth(method='lm',col='red')+
+  labs(x='Canola overlap in year 1',y='Abundance in year 2')
 
 #Plot of GP trends
 with(datalist,data.frame(date=c(centDates2015,centDates2016),
@@ -1337,26 +1428,72 @@ with(datalist,data.frame(date=c(centDates2015,centDates2016),
   ggplot(aes(date,pred))+geom_ribbon(aes(ymax=upr,ymin=lwr),alpha=0.3)+
   geom_line(size=1)+facet_wrap(~year)
 
-#PP plots for bee counts - looks OK
-with(mod1,PPplots(apply(count_resid,1,function(x) sum(abs(x))),
-                  apply(predCount_resid,1,function(x) sum(abs(x))),
-                  datalist$count,exp(apply(mu,2,median))))
+#Plot canola bloom
+p1 <- with(mod1,data.frame(canolaBloom=datalist$canolaBloom,centEndDate=round((datalist$centBloomDate)*7+206.41),
+                     nearCanola=datalist$nearCanola,year=datalist$year[datalist$bloomIndex],
+                     predBloom=apply(mod1$muCanola,2,median),uprBloom=apply(mod1$muCanola,2,quantile,0.95),
+                     lwrBloom=apply(mod1$muCanola,2,quantile,0.05))) %>% 
+  filter(nearCanola==1) %>% mutate(year=factor(year,labels=c('2015','2016'))) %>% 
+  arrange(centEndDate,year) %>% 
+  mutate(centEndDate=as.POSIXct(paste(centEndDate,2015),format='%j %Y')) %>% 
+  ggplot(aes(x=centEndDate,col=year))+geom_line(aes(y=predBloom),size=1)+
+  geom_ribbon(aes(ymax=uprBloom,ymin=lwrBloom,fill=year,col=NULL),alpha=0.3)+
+  geom_point(aes(y=canolaBloom),show.legend=F)+
+  labs(x='Day of Year',y='Percent Bloom',fill='Year',col='Year')+
+  scale_colour_manual(values=c('red','blue'))+
+  scale_fill_manual(values=c('red','blue'))
+ggsave('../Figures/bloomModel.png',p1,width=8,height=6)
 
-     
 
-# #Plot canola bloom
-# with(datalist,data.frame(canolaBloom=canolaBloom,centEndDate=centBloomDate,nearCanola=nearCanola,
-#                          year=year[bloomIndex],BLID=site[bloomIndex])) %>%
-#   filter(nearCanola==1) %>% 
-#   ggplot(aes(centEndDate,canolaBloom,col=factor(year),group=BLID))+
-#   geom_point()+geom_smooth(aes(group=year))
+#Get all coefficients from models
+getCoefs <- function(path){
+  load(path)
+  mod1 <- extract(modGP)
+  a <- data.frame(spp=sub('_mod.Rdata','',path),
+                  par=c('SNLslope1','SNLslope2','slopeLastYear','slopeCanolaOverlap'),
+                  meas=rbind(t(apply(mod1$SNLslope,2,function(x) quantile(x,c(0.025,0.25,0.5,0.75,0.975)))),
+                             quantile(mod1$slopeLastYear,c(0.025,0.25,0.5,0.75,0.975)),
+                             quantile(mod1$slopeCanolaOverlap,c(0.025,0.25,0.5,0.75,0.975))))
+  names(a)[3:7] <- c('lwr2','lwr1','med','upr1','upr2')
+  rm(mod1,modGP); gc()
+  return(a)
+}
 
-# print(modGP,pars='siteCanolaLims') #OK
-# traceplot(modGP,pars='siteCanolaLims') 
-# print(modGP,pars='siteCanolaOverlap') 
-# print(modGP,pars='predCanolaPass') 
+filepaths <- unname(sapply(top20[1:10],function(x) {
+  x[1] <- tolower(x[1])
+  x <- sub(' ','_',x)
+  x <- paste(x,'_mod.Rdata',sep='')
+  return(x)
+}))
+coefs <- lapply(c('overall_mod.Rdata',filepaths),getCoefs)
+coefs <- do.call('rbind',coefs)
+coefs$genSpp <- NA
+coefs$family <- NA
+tempDat <- select(top20bees,family,genSpp,genus,species) %>% distinct() %>% arrange(family,genus,species)
 
-# launch_shinystan(modGP)
+for(i in 1:nrow(tempDat)){
+  mat <- grepl(tempDat$species[i],coefs$spp)
+  coefs$family[mat] <- as.character(tempDat$family)[i]
+  coefs$genSpp[mat] <- tempDat$genSpp[i]
+}
+coefs$family[coefs$spp=='overall'] <- 'Overall'
+coefs$genSpp[coefs$spp=='overall'] <- 'Overall'
+coefs <- coefs %>% filter(par!='SNLslope1') %>%
+  mutate(par=factor(par,labels=c('Canola\nlast year','Abundance\nlast year','Semi-natural\nlast year')))
+coefs$spp <- NULL
+coefs <- coefs %>% arrange(par,family)
+coefs$genSpp <- factor(coefs$genSpp,levels=unique(as.character(coefs$genSpp)))
+
+p1 <- 
+  ggplot(coefs,aes(x=med,y=genSpp))+
+  geom_vline(xintercept=0,col='red')+#coord_flip()+
+  geom_errorbarh(aes(xmin=lwr2,xmax=upr2),height=0)+
+  geom_errorbarh(aes(xmin=lwr1,xmax=upr1),height=0,size=2)+
+  geom_point(size=3)+
+  facet_wrap(~par,scales='free_x',as.table=F)+
+  labs(x='Bee species',y='Coefficient')+
+  theme(axis.text.y=element_text(size=10),axis.text.x=element_text(size=10))
+ggsave('../Figures/coef_estimates.png',p1,width=10,height=6)
 
 #Plot of population between years (from data)
 ggplot(temp,aes(midDate,Anthophora_terminalis,col=factor(year),group=paste(year,BLID,replicate)))+
@@ -1406,6 +1543,57 @@ data.frame(year=datalist$year,eta=exp(apply(modGP_results$eta,2,median)),site=da
 
 
 detach("package:rstan", unload=TRUE) #Detach rstan
+
+
+# Community analysis using vegan ------------------------------------------
+library(vegan)
+# ord <- metaMDS(dune)
+# plot(ord,type='n',disp='sites')
+# ordihull(ord,dune.env$Management,col=1:4,lwd=3)
+# points(ord,display='sites')
+
+#Matrix of abundance values
+beeMat <- bees %>% group_by(BLID,year,genSpp) %>%
+  summarize(count=n()) %>% ungroup() %>% 
+  spread(genSpp,count,fill=0) %>% select(-BLID,-year) %>% 
+  as.matrix()
+
+ordBees <- metaMDS(beeMat,k=3,trymax=300)
+
+plot(ordBees)
+
+# ord.fit <- with(landscape,envfit(ordBees~year+Canola_100+Forest_100+NativeGrassland_100+Pasture_100+Shrubland_100))
+ord.fit <- with(landscape,envfit(ordBees~year))
+print(ord.fit)
+plot(ord.fit)
+
+is2015 <- landscape$year=='2015'
+is2016 <- landscape$year=='2016'
+
+#Model of community from 2015. Looks like Forest and Shrubland are important
+ord.fit2015 <- with(ordBees,envfit(points[is2015,] ~ landscape$Forest_100[is2015]+
+                                   landscape$NativeGrassland_100[is2015]+
+                                   landscape$Shrubland_100[is2015])
+)
+print(ord.fit2015)
+plot(ordBees$points[is2015,])
+plot(ord.fit2015)
+
+#Model of community from 2016. Looks like MDS1 and 2 are important, and canola from 2015 changes very little
+ord.fit2016 <- with(ordBees,envfit(points[is2016,]~points[is2015,1]+points[is2015,2]+points[is2015,3]+
+                                     landscape$Canola_100[is2015]))
+
+print(ord.fit2016)
+
+plot(ordBees$points[is2016,])
+plot(ord.fit)
+
+
+
+# Forest+NativeGrassland+Shrubland
+
+
+
 
 # Unused models -----------------------------------------------------------
 
