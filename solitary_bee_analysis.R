@@ -8,7 +8,7 @@ library(tidyr)
 library(beepr)
 
 #ggplot theme
-prestheme=theme(legend.position='right',
+prestheme <- theme(legend.position='right',
                 legend.text=element_text(size=15),
                 axis.text=element_text(size=15), 
                 axis.title=element_text(size=20),
@@ -206,18 +206,20 @@ invLogit <- function(x){
   return(i)
 }
 
-#Posterior predictive check plots
 PPplots <- function(resid,predResid,actual,pred,main=NULL){
   par(mfrow=c(2,1))
-  plot(resid,predResid,xlab='Sum residuals',ylab='Sum simulated residuals',main=main)
+  plot(resid~predResid,ylab='Sum actual residuals',xlab='Sum simulated residuals',main=main)
   x <- sum(resid<predResid)/length(resid)
   legend('topleft',paste('p =',round(min(x,1-x),3)))
   abline(0,1,col='red') #PP plot
-  plot(actual,pred, #Predicted vs Actual - good
-       ylab=paste('Predicted',main),xlab=paste('Actual',main)) 
+  plot(actual~pred, #Predicted vs Actual
+       xlab=paste('Predicted',main),ylab=paste('Actual',main)) 
   abline(0,1,col='red')
+  abline(lm(actual~pred),col='red',lty=2)
   par(mfrow=c(1,1))
 }
+
+
 
 
 
@@ -1179,22 +1181,21 @@ options(mc.cores = 4)
 setwd("~/Projects/UofC/wildbee_canola_project/models")
 library(shinystan)
 
-#Names of top 20 wild spp
-top20=filter(bees,BLID %in% year2year,!agricultural)  %>%
+#Names of wild spp
+wildSpp <- filter(bees,BLID %in% year2year,!agricultural)  %>%
   mutate(year=paste0('y',year)) %>%
   group_by(year,genSpp) %>%
   summarize(number=n()) %>%
   spread(year,number,fill=0) %>%
   mutate(notZero=(y2015>0&y2016>0),diff=abs(y2015-y2016),total=y2015+y2016) %>%
   filter(notZero) %>% #Filter years with zero in one year
-  filter((diff/total)<0.5) %>% #Filter sp where magnitude of yearly difference is less than 50% of total count
-  arrange(desc(total)) %>%
-  top_n(20,total) %>%
-  .$genSpp
+  # filter((diff/total)<0.5) %>% #Filter sp where magnitude of yearly difference is less than 50% of total count
+  arrange(desc(total)) %>% mutate(pathName=gsub(' ','_',genSpp))
+  # top_n(20,total) %>%
 
 #Occurance data for top 20 bees
-top20bees <- filter(bees,BLID %in% year2year) %>%
-  filter(genSpp %in% top20)
+wildBees <- filter(bees,BLID %in% year2year) %>%
+  filter(genSpp %in% wildSpp$genSpp)
 
 #Trapping occurance data (start and end of passes)
 passes <- trap %>%
@@ -1204,23 +1205,19 @@ passes <- trap %>%
   arrange(year,BLID,pass)
 
 #Anthophora model 
-temp <- group_by(top20bees,genSpp,BLID,pass,replicate,year) %>% #Abundance by date & trap
+temp <- wildBees %>% mutate(genSpp=factor(genSpp,levels=wildSpp$genSpp,labels=gsub(' ','_',wildSpp$genSpp))) %>% 
+  group_by(genSpp,BLID,pass,replicate,year) %>% #Abundance by date & trap
   summarize(count=n()) %>% ungroup() %>% 
-  mutate(genSpp=factor(gsub(' ','_',genSpp))) %>% 
-  unite(ID,BLID:year) %>% 
-  spread(genSpp,count) %>%  
-  full_join(passes,by='ID') %>% 
+  unite(ID,BLID:year) %>% spread(genSpp,count) %>%  full_join(passes,by='ID') %>% 
   gather('genSpp','count',contains("_")) %>% 
   mutate(count=ifelse(is.na(count),0,count)) %>% #Changes NAs to zeros
-  select(-ID) %>% 
-  mutate(BLID=factor(BLID)) %>%
-  arrange(genSpp,year,BLID,pass) %>%
-  spread(genSpp,count) %>% 
-  mutate(traplength=(endDate-startDate)/7) %>% #Trapping period (in weeks)
-  mutate(centDate=(midDate-mean(midDate))/7) %>%  #Centers midDate and converts to week
+  select(-ID) %>% mutate(BLID=factor(BLID)) %>% arrange(genSpp,year,BLID,pass) %>%
+  spread(genSpp,count) %>%  mutate(traplength=(endDate-startDate)/7) %>% #Trapping period (in weeks)
+  mutate(centDate=(midDate-mean(midDate))/7) %>%  #Centers midDate (around 206.41) and converts to week 
   mutate(centEndDate=(endDate-mean(midDate))/7) %>%  #Centers endDate and coverts to week
   group_by(year,BLID) %>% 
-  mutate(nearCanola=any(canolaBloom>0))  #Was canola bloom recorded at that site?
+  mutate(nearCanola=any(canolaBloom>0)) %>%   #Was canola bloom recorded at that site?
+  data.frame()
   
 # Year-to-year landscape proportions (at different radii)
 # landscape %>% 
@@ -1292,72 +1289,67 @@ inits <- function() { with(datalist,
 #   scale_y_log10()
 
 #Overall model
-datalist$count <- rowSums(temp[,c(9:28)])
+datalist$count <- rowSums(temp[,c(9:96)]) #Sum all of bee spp
 modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
-save(modGP,file='overall_mod.Rdata')
+save(modGP,file='Overall.Rdata')
 
-#Anthophora terminalis model - OK
-datalist$count <- temp$Anthophora_terminalis
-modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
-save(modGP,file='anthophora_terminalis_mod.Rdata')
-#Model for Dufourea maura - predictions look bad
-datalist$count <- temp$Dufourea_maura
-modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
-save(modGP,file='dufourea_maura_mod.Rdata')
+#Run model for top 20 bees
+for(i in wildSpp$pathName[1:20]){
+  datalist$count <- temp[,i] #Sum all of bee spp
+  modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
+  save(modGP,file=paste0(i,'.Rdata'))
+}
 
-#Model for Lasioglossum leucozonium - OK
-datalist$count <- temp$Lasioglossum_leucozonium
-modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
-save(modGP,file='lasioglossum_leucozonium_mod.Rdata')
-# load('lasioglossum_leucozonium_mod.Rdata')
+#Make basic diagnostic plots for each model
 
-#Model for Melissodes confusus - predictions look bad, PP checks marginal
-datalist$count <- temp$Melissodes_confusus
-modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
-save(modGP,file='melissodes_confusus_mod.Rdata')
-
-#Model for Megachile perihirta - OK
-datalist$count <- temp$Megachile_perihirta
-modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
-save(modGP,file='megachile_perihirta_mod.Rdata')
-
-#Model for Lasioglossum dialictus_sp1 - predictions look bad
-datalist$count <- temp$Lasioglossum_dialictus_sp1
-modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
-save(modGP,file='lasioglossum_dialictus_sp1_mod.Rdata')
-
-#Model for Hylaeus hylaeus_sp9 - predictions look bad
-datalist$count <- temp$Hylaeus_hylaeus_sp9
-modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
-save(modGP,file='hylaeus_hylaeus_sp9_mod.Rdata')
-
-#Model for Anthophora occidentalis - predictions look bad
-datalist$count <- temp$Anthophora_occidentalis
-modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
-save(modGP,file='anthophora_occidentalis_mod.Rdata')
-
-#Model for Melissodes rivalis
-datalist$count <- temp$Melissodes_rivalis
-modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
-save(modGP,file='melissodes_rivalis_mod.Rdata')
-
-#Model for Andrena peckhami
-datalist$count <- temp$Andrena_peckhami
-modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
-save(modGP,file='andrena_peckhami_mod.Rdata')
-
-pars=c('rho','alpha','b0','sigma_site','SNLslope','slopeLastYear','slopeCanolaOverlap','canolaEffect','phi','thetaZI')
+pars <- c('rho','alpha','b0','sigma_site','SNLslope','slopeLastYear','slopeCanolaOverlap','canolaEffect','phi','thetaZI')
 # pars=c('muCanola','sigmaCanola','ampCanola','residCanola') #OK
-stan_hist(modGP,pars=pars)
-# traceplot(modGP,pars=pars)
+
+for(i in c(wildSpp$pathName[1:20],'Overall')){
+  load(paste0(i,'.Rdata'))
+  p1 <- stan_hist(modGP,pars=pars)+labs(title=i) #Posterior distributions
+  p2 <- traceplot(modGP,pars=pars) #Traceplot
+  mod1 <- extract(modGP)
+  #PP plots for bee counts - looks OK
+  with(mod1,PPplots(apply(count_resid,1,function(x) sum(abs(x))),
+                    apply(predCount_resid,1,function(x) sum(abs(x))),
+                    temp[,i],exp(apply(mu,2,median)),main=i))
+}
+
+
+
+
+
+
+
+
 # print(modGP,pars=pars)# plot(modGP,pars=pars)
 
-  
-mod1 <- extract(modGP)
-#PP plots for bee counts - looks OK
-with(mod1,PPplots(apply(count_resid,1,function(x) sum(abs(x))),
-                  apply(predCount_resid,1,function(x) sum(abs(x))),
-                  datalist$count,exp(apply(mu,2,median))))
+
+
+#Plot of Gaussian processes
+with(datalist,data.frame(rbind(t(apply(mod1$gpTrend2015,2,function(x) quantile(x,c(0.05,0.5,0.95))))[dateIndex2015,c(1:3)],
+                                   t(apply(mod1$gpTrend2016,2,function(x) quantile(x,c(0.05,0.5,0.95))))[dateIndex2016,c(1:3)]),
+     day=c(centDates2015[dateIndex2015],centDates2016[dateIndex2016]),
+     year=c(rep(1,length(dateIndex2015)),rep(2,length(dateIndex2016))),
+     resid=log(count/(apply(mod1$count_resid,2,median)+count)))) %>% #Log-residual
+  rename(lwr=X5.,med=X50.,upr=X95.) %>%
+  mutate(resid=resid+med,day=(day*7+206.41),year=factor(year,labels=c('2015','2016'))) %>% 
+  mutate_at(vars(lwr:upr,resid),exp) %>%
+  ggplot(aes(day,group=year))+geom_ribbon(aes(ymax=upr,ymin=lwr),alpha=0.3)+
+  geom_line(aes(y=med)) + geom_point(aes(y=resid)) + 
+  facet_wrap(~year,ncol=1)+labs(y='Counts per week',x='Day of year')
+
+with(datalist,t(
+  apply(mod1$gpTrend2015,2,function(x) quantile(x,c(0.05,0.5,0.95)))
+  # mod1$gpTrend2015 #[dateIndex2015]
+  )
+)
+
+
+
+
+
 
 #Faster Pairplots
 pairs(mod1[c(pars,'lp__')],lower.panel=function(x,y){
@@ -1467,31 +1459,47 @@ filepaths <- unname(sapply(top20[1:10],function(x) {
 }))
 coefs <- lapply(c('overall_mod.Rdata',filepaths),getCoefs)
 coefs <- do.call('rbind',coefs)
-coefs$genSpp <- NA
-coefs$family <- NA
-tempDat <- select(top20bees,family,genSpp,genus,species) %>% distinct() %>% arrange(family,genus,species)
 
-for(i in 1:nrow(tempDat)){
-  mat <- grepl(tempDat$species[i],coefs$spp)
-  coefs$family[mat] <- as.character(tempDat$family)[i]
-  coefs$genSpp[mat] <- tempDat$genSpp[i]
-}
-coefs$family[coefs$spp=='overall'] <- 'Overall'
-coefs$genSpp[coefs$spp=='overall'] <- 'Overall'
-coefs <- coefs %>% filter(par!='SNLslope1') %>%
-  mutate(par=factor(par,labels=c('Canola\nlast year','Abundance\nlast year','Semi-natural\nlast year')))
-coefs$spp <- NULL
-coefs <- coefs %>% arrange(par,family)
-coefs$genSpp <- factor(coefs$genSpp,levels=unique(as.character(coefs$genSpp)))
+coefs <- coefs %>% mutate(spp=as.character(spp)) %>% 
+  mutate(spp=paste(toupper(substr(spp,0,1)),substr(spp,2,nchar(spp)),sep='')) %>% #capitalize
+  mutate(spp=sub('_',' ',spp)) %>% 
+  left_join(distinct(select(top20bees,family,genSpp)),by=c("spp"="genSpp")) %>% #Join in family names
+  mutate(family=as.character(family)) %>% 
+  mutate(family=ifelse(spp=='Overall','Overall',family)) %>% #Fix names
+  rowwise() %>% 
+  mutate(spp=ifelse(grepl('_',spp),paste(strsplit(spp,' ')[[1]][1],'spp'),spp)) %>%
+  data.frame() %>% 
+  mutate(param=as.character(par)) %>% select(-par) %>% 
+  filter(param!='SNLslope1') %>% #Strip out SNL slopes from year 1
+  mutate(param=factor(param,labels=c('Canola\nlast year','Abundance\nlast year','Semi-natural\nlast year'))) 
+
+nameOrder <- coefs %>% select(spp,family) %>% distinct() %>% 
+  mutate(family=factor(family,levels=c("Overall","Andrenidae","Apidae","Colletidae","Halictidae","Megachilidae"))) %>%
+  arrange(family,spp) %>% mutate(spp=as.character(spp)) 
+
+nameOrder <- top20bees %>% group_by(genSpp) %>% 
+  summarize(count=n()) %>% arrange(desc(count)) %>% 
+  top_n(10) %>% rename(spp=genSpp) %>% rowwise() %>% 
+  mutate(spp=ifelse(grepl('_sp',spp),paste(strsplit(spp,' ')[[1]][1],'spp'),spp)) %>% 
+  right_join(nameOrder,by='spp')
+
+left_join(coefs,nameOrder,by='spp')
+
+
+  
+
 
 p1 <- 
-  ggplot(coefs,aes(x=med,y=genSpp))+
+  coefs %>% 
+  
+  
+  ggplot(aes(x=med,y=genSpp))+
   geom_vline(xintercept=0,col='red')+#coord_flip()+
   geom_errorbarh(aes(xmin=lwr2,xmax=upr2),height=0)+
   geom_errorbarh(aes(xmin=lwr1,xmax=upr1),height=0,size=2)+
   geom_point(size=3)+
   facet_wrap(~par,scales='free_x',as.table=F)+
-  labs(x='Bee species',y='Coefficient')+
+  labs(y='Bee species',x='Slope Parameter')+
   theme(axis.text.y=element_text(size=10),axis.text.x=element_text(size=10))
 ggsave('../Figures/coef_estimates.png',p1,width=10,height=6)
 

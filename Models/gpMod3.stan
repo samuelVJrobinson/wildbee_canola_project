@@ -105,7 +105,7 @@ transformed parameters {
 	vector[Ndates2016] gpTrend2016; //Effect of gaussian process (temporal trend) for 2016
 	
 	/* 	Calculate "overlap" metric for each pass (for how much of each pass was canola bloom "on" or "off") and
-		multiply by proportion of canola surrounding each site - spatiotemporal availability
+		multiply by proportion of canola surrounding each 	site - spatiotemporal availability
 		Sum overlap for each site	*/
 	
 	//Start and stop dates of canola (over 10%). Assumes amplitude of 100%
@@ -221,7 +221,7 @@ model {
 	
 	//Priors	
 	//Gaussian process - 1 for each year
-	rho ~ inv_gamma(10,18); //Prior for length-scale	
+	rho ~ inv_gamma(7.5,15); //Informative prior for length-scale	
 	alpha ~  normal(0,1); //Prior for covariance				
 	// sigma ~ gamma(1,1); // Variance between points at same site at same time	
   	eta2015 ~ normal(0,1); //Unit normals	
