@@ -224,6 +224,7 @@ PPplots <- function(resid,predResid,actual,pred,main=NULL){
 
 
 
+
 # Basic abundance plots ---------------------------------------------------
 
 #Summary of species
@@ -1185,7 +1186,8 @@ library(shinystan)
 wildSpp <- filter(bees,BLID %in% year2year,!agricultural)  %>%
   mutate(year=paste0('y',year)) %>%
   group_by(year,genSpp) %>%
-  summarize(number=n()) %>%
+  summarize(number=n()) %>% ungroup() %>% 
+  left_join(distinct(select(bees,genSpp,family)),by='genSpp') %>% 
   spread(year,number,fill=0) %>%
   mutate(notZero=(y2015>0&y2016>0),diff=abs(y2015-y2016),total=y2015+y2016) %>%
   filter(notZero) %>% #Filter years with zero in one year
@@ -1288,68 +1290,65 @@ inits <- function() { with(datalist,
 #   ggplot(aes(dates,count))+geom_point()+geom_line(aes(group=site))+facet_wrap(~year)+
 #   scale_y_log10()
 
-#Overall model
-datalist$count <- rowSums(temp[,c(9:96)]) #Sum all of bee spp
-modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
-save(modGP,file='Overall.Rdata')
-
+# #Run Overall model
+# datalist$count <- rowSums(temp[,c(9:96)]) #Sum all of bee spp
+# modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
+# save(modGP,file='Overall.Rdata')
+# 
 #Run model for top 20 bees
 for(i in wildSpp$pathName[1:20]){
-  datalist$count <- temp[,i] #Sum all of bee spp
+  datalist$count <- temp[,i] 
   modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
   save(modGP,file=paste0(i,'.Rdata'))
 }
 
-#Make basic diagnostic plots for each model
-
 pars <- c('rho','alpha','b0','sigma_site','SNLslope','slopeLastYear','slopeCanolaOverlap','canolaEffect','phi','thetaZI')
 # pars=c('muCanola','sigmaCanola','ampCanola','residCanola') #OK
 
+#Make basic diagnostic plots for each model
 for(i in c(wildSpp$pathName[1:20],'Overall')){
   load(paste0(i,'.Rdata'))
   p1 <- stan_hist(modGP,pars=pars)+labs(title=i) #Posterior distributions
+  ggsave(paste0('../Figures/Diagnostic Plots/',i,'_dist.png'),p1,width=12,height=8)
   p2 <- traceplot(modGP,pars=pars) #Traceplot
+  ggsave(paste0('../Figures/Diagnostic Plots/',i,'_trace.png'),p2,width=12,height=8)
   mod1 <- extract(modGP)
-  #PP plots for bee counts - looks OK
+  
+  #Actual counts
+  if(i=='Overall') act <- rowSums(temp[,c(9:96)]) else act <- temp[,i]
+  
+  #PP plots
+  png(file =paste0('../Figures/Diagnostic Plots/',i,'_PP.png'), 
+      width=6,height=12,units='in',res=100,bg = "white")
   with(mod1,PPplots(apply(count_resid,1,function(x) sum(abs(x))),
                     apply(predCount_resid,1,function(x) sum(abs(x))),
-                    temp[,i],exp(apply(mu,2,median)),main=i))
+                    act,exp(apply(mu,2,median)),main=i))
+  dev.off()
+  print(paste('Plots made for',i))
 }
 
+#Notes:
+#Bad traces for site level sigma. Could be due to poor sample size?
+#Andrena medionitens - 20
+#Osmia melanosmia - 18
 
+#Marginal traces for site level sigma:
+#Anthophora occidentalis - 19
+#Dufourea maura - 12
+#Hylaeus sp9 - 17
 
-
-
-
-
-
-# print(modGP,pars=pars)# plot(modGP,pars=pars)
-
-
-
-#Plot of Gaussian processes
+#Plot of Gaussian processes for each year
 with(datalist,data.frame(rbind(t(apply(mod1$gpTrend2015,2,function(x) quantile(x,c(0.05,0.5,0.95))))[dateIndex2015,c(1:3)],
-                                   t(apply(mod1$gpTrend2016,2,function(x) quantile(x,c(0.05,0.5,0.95))))[dateIndex2016,c(1:3)]),
-     day=c(centDates2015[dateIndex2015],centDates2016[dateIndex2016]),
-     year=c(rep(1,length(dateIndex2015)),rep(2,length(dateIndex2016))),
-     resid=log(count/(apply(mod1$count_resid,2,median)+count)))) %>% #Log-residual
+                               t(apply(mod1$gpTrend2016,2,function(x) quantile(x,c(0.05,0.5,0.95))))[dateIndex2016,c(1:3)]),
+                         day=c(centDates2015[dateIndex2015],centDates2016[dateIndex2016]),
+                         year=c(rep(1,length(dateIndex2015)),rep(2,length(dateIndex2016))),
+                         resid=log(act/(apply(mod1$count_resid,2,median)+act)))) %>% #Log-residual
   rename(lwr=X5.,med=X50.,upr=X95.) %>%
   mutate(resid=resid+med,day=(day*7+206.41),year=factor(year,labels=c('2015','2016'))) %>% 
   mutate_at(vars(lwr:upr,resid),exp) %>%
   ggplot(aes(day,group=year))+geom_ribbon(aes(ymax=upr,ymin=lwr),alpha=0.3)+
   geom_line(aes(y=med)) + geom_point(aes(y=resid)) + 
-  facet_wrap(~year,ncol=1)+labs(y='Counts per week',x='Day of year')
-
-with(datalist,t(
-  apply(mod1$gpTrend2015,2,function(x) quantile(x,c(0.05,0.5,0.95)))
-  # mod1$gpTrend2015 #[dateIndex2015]
-  )
-)
-
-
-
-
-
+  facet_wrap(~year,ncol=1)+labs(y='Counts per week',x='Day of year',main=i)
 
 #Faster Pairplots
 pairs(mod1[c(pars,'lp__')],lower.panel=function(x,y){
@@ -1357,7 +1356,7 @@ pairs(mod1[c(pars,'lp__')],lower.panel=function(x,y){
   text(0.5, 0.5, round(cor(x,y),2), cex = 1 * exp(abs(cor(x,y))))})
 
 #Plot of random intercepts - not really normal, so sigma2 has trouble centering.
-t(apply(mod1$b0_site[,,2],2,function(x) quantile(x,c(0.5,0.975,0.025)))) %>%
+t(apply(mod1$b0_site,2,function(x) quantile(x,c(0.5,0.975,0.025)))) %>%
   as.data.frame() %>% rename(median='50%',upr='97.5%',lwr='2.5%') %>% arrange(median) %>%
   mutate(row=1:nrow(.)) %>% 
   # ggplot(aes(row,median))+geom_pointrange(aes(ymax=upr,ymin=lwr))+geom_hline(yintercept=0,col='red')
@@ -1411,14 +1410,6 @@ mutate(tempDat,expY1=median(mod1$slopeCanolaOverlap)*canolaOverlap) %>%
   # geom_smooth(method='lm',col='red')+
   labs(x='Canola overlap in year 1',y='Abundance in year 2')
 
-#Plot of GP trends
-with(datalist,data.frame(date=c(centDates2015,centDates2016),
-                         pred=c(apply(mod1$gpTrend2015,2,mean),apply(mod1$gpTrend2016,2,mean)),
-                         lwr=c(apply(mod1$gpTrend2015,2,quantile,0.1),apply(mod1$gpTrend2016,2,quantile,0.1)),
-                         upr=c(apply(mod1$gpTrend2015,2,quantile,0.9),apply(mod1$gpTrend2016,2,quantile,0.9)),
-                         year=c(rep(2015,Ndates2015),rep(2016,Ndates2016)))) %>% 
-  ggplot(aes(date,pred))+geom_ribbon(aes(ymax=upr,ymin=lwr),alpha=0.3)+
-  geom_line(size=1)+facet_wrap(~year)
 
 #Plot canola bloom
 p1 <- with(mod1,data.frame(canolaBloom=datalist$canolaBloom,centEndDate=round((datalist$centBloomDate)*7+206.41),
@@ -1437,71 +1428,94 @@ p1 <- with(mod1,data.frame(canolaBloom=datalist$canolaBloom,centEndDate=round((d
 ggsave('../Figures/bloomModel.png',p1,width=8,height=6)
 
 
-#Get all coefficients from models
-getCoefs <- function(path){
-  load(path)
-  mod1 <- extract(modGP)
-  a <- data.frame(spp=sub('_mod.Rdata','',path),
-                  par=c('SNLslope1','SNLslope2','slopeLastYear','slopeCanolaOverlap'),
-                  meas=rbind(t(apply(mod1$SNLslope,2,function(x) quantile(x,c(0.025,0.25,0.5,0.75,0.975)))),
-                             quantile(mod1$slopeLastYear,c(0.025,0.25,0.5,0.75,0.975)),
-                             quantile(mod1$slopeCanolaOverlap,c(0.025,0.25,0.5,0.75,0.975))))
-  names(a)[3:7] <- c('lwr2','lwr1','med','upr1','upr2')
-  rm(mod1,modGP); gc()
-  return(a)
-}
+#Get all main coefficients from models
+# getCoefs <- function(path){
+#   load(path)
+#   mod1 <- extract(modGP)
+#   a <- data.frame(spp=sub('.Rdata','',path),
+#                   par=c('SNLslope1','SNLslope2','slopeLastYear','slopeCanolaOverlap'),
+#                   meas=rbind(t(apply(mod1$SNLslope,2,function(x) quantile(x,c(0.025,0.25,0.5,0.75,0.975)))),
+#                              quantile(mod1$slopeLastYear,c(0.025,0.25,0.5,0.75,0.975)),
+#                              quantile(mod1$slopeCanolaOverlap,c(0.025,0.25,0.5,0.75,0.975))))
+#   names(a)[3:7] <- c('lwr2','lwr1','med','upr1','upr2')
+#   rm(mod1,modGP); gc()
+#   return(a)
+# }
+# filepaths <- unname(sapply(c(wildSpp$pathName[1:20],'Overall'),function(x) {
+#   # x[1] <- tolower(x[1])
+#   x <- sub(' ','_',x)
+#   x <- paste(x,'.Rdata',sep='')
+#   return(x)
+# }))
+# coefs <- lapply(filepaths,getCoefs)
+# coefs <- do.call('rbind',coefs)
+# save(coefs,file='mainCoefs.Rdata')
+load('mainCoefs.Rdata')
 
-filepaths <- unname(sapply(top20[1:10],function(x) {
-  x[1] <- tolower(x[1])
-  x <- sub(' ','_',x)
-  x <- paste(x,'_mod.Rdata',sep='')
-  return(x)
-}))
-coefs <- lapply(c('overall_mod.Rdata',filepaths),getCoefs)
-coefs <- do.call('rbind',coefs)
-
-coefs <- coefs %>% mutate(spp=as.character(spp)) %>% 
+coefs <- coefs %>% mutate(spp=as.character(spp)) %>%
   mutate(spp=paste(toupper(substr(spp,0,1)),substr(spp,2,nchar(spp)),sep='')) %>% #capitalize
-  mutate(spp=sub('_',' ',spp)) %>% 
-  left_join(distinct(select(top20bees,family,genSpp)),by=c("spp"="genSpp")) %>% #Join in family names
-  mutate(family=as.character(family)) %>% 
+  mutate(spp=sub('_',' ',spp)) %>%
+  left_join(distinct(select(bees,genSpp,family)),by=c('spp'='genSpp')) %>%  #Join in family names
+  mutate(family=as.character(family)) %>%
   mutate(family=ifelse(spp=='Overall','Overall',family)) %>% #Fix names
-  rowwise() %>% 
-  mutate(spp=ifelse(grepl('_',spp),paste(strsplit(spp,' ')[[1]][1],'spp'),spp)) %>%
-  data.frame() %>% 
-  mutate(param=as.character(par)) %>% select(-par) %>% 
-  filter(param!='SNLslope1') %>% #Strip out SNL slopes from year 1
-  mutate(param=factor(param,labels=c('Canola\nlast year','Abundance\nlast year','Semi-natural\nlast year'))) 
+  rowwise() %>%
+  mutate(spp=ifelse(grepl('_',spp),paste(strsplit(spp,' ')[[1]][1],strsplit(spp,'_')[[1]][2]),spp)) %>%
+  data.frame() %>%
+  mutate(param=as.character(par)) %>% select(-par) %>%
+  mutate(lwr2=ifelse(lwr2>-10,lwr2,-10)) %>% #Trim limits of x-axis
+  # filter(param!='SNLslope1') %>% #Strip out SNL slopes from year 1
+  mutate(param=factor(param,levels=c('SNLslope1','SNLslope2','slopeLastYear','slopeCanolaOverlap'),
+                      labels=c('Semi-natural → Y1 Abundance','Semi-natural → Y2 Abundance',
+                                     'Y1 Abundance → Y2 Abundance ','Y1 Canola → Y2 Abundance')))
 
 nameOrder <- coefs %>% select(spp,family) %>% distinct() %>% 
   mutate(family=factor(family,levels=c("Overall","Andrenidae","Apidae","Colletidae","Halictidae","Megachilidae"))) %>%
-  arrange(family,spp) %>% mutate(spp=as.character(spp)) 
+  arrange(desc(family),desc(spp)) %>% mutate(spp=as.character(spp)) 
 
-nameOrder <- top20bees %>% group_by(genSpp) %>% 
-  summarize(count=n()) %>% arrange(desc(count)) %>% 
-  top_n(10) %>% rename(spp=genSpp) %>% rowwise() %>% 
-  mutate(spp=ifelse(grepl('_sp',spp),paste(strsplit(spp,' ')[[1]][1],'spp'),spp)) %>% 
-  right_join(nameOrder,by='spp')
+#Parameters for rectangles
+rectParams1 <- nameOrder %>% mutate(family=factor(family,levels=levels(nameOrder$family)[length(levels(nameOrder$family)):1])) %>% 
+  group_by(family) %>% summarize(n=n()) %>% ungroup %>%
+  mutate(ymax=cumsum(n),ymin=lag(ymax)) %>% mutate(ymin=ifelse(is.na(ymin),0,ymin)) %>%
+  mutate(ymax=ymax,ymin=ymin) %>% select(-n) %>% 
+  unite(family,family:ymin)
 
-left_join(coefs,nameOrder,by='spp')
+rectParams2 <- coefs %>% 
+  gather('est','quant',lwr2:upr2) %>% 
+  group_by(param) %>% summarize(xmax=max(quant),xmin=min(quant)) %>% 
+  unite(param,param:xmin)
 
+rectParams <- expand.grid(param=rectParams2$param,family=rectParams1$family) %>% 
+  separate(param,c('param','xmax','xmin'),sep='_',convert=T) %>% 
+  separate(family,c('family','ymax','ymin'),sep='_',convert=T) %>% 
+  mutate(param=factor(param,levels=levels(coefs$param))) %>% 
+  mutate(family=factor(family,levels=levels(nameOrder$family)))
+rm(rectParams1,rectParams2)
 
-  
+#Parameters for text labels
+textParams <- rectParams %>% rowwise() %>% 
+  mutate(x=mean(xmax,xmin)-abs(xmax-xmin)*0.99,y=mean(ymax,ymin)-abs(ymax-ymin)*0.5) %>% 
+  select(-ymax,-ymin,-xmax,-xmin) %>% 
+  mutate(family=as.character(family),keep=param=='Semi-natural → Y1 Abundance'&family!='Overall') %>% 
+  mutate(family=ifelse(keep,family,NA),x=ifelse(keep,x,NA),y=ifelse(keep,y,NA)) %>% select(-keep)
 
-
-p1 <- 
-  coefs %>% 
-  
-  
-  ggplot(aes(x=med,y=genSpp))+
-  geom_vline(xintercept=0,col='red')+#coord_flip()+
+p1 <- coefs %>% mutate(spp=factor(spp,levels=nameOrder$spp)) %>% rowwise() %>% 
+  ggplot(aes(x=med,y=spp))+
+  facet_wrap(~param,scales='free_x',ncol=4)+
+  geom_rect(data=rectParams,aes(x=NULL,y=NULL,xmin=xmin,xmax=xmax,ymin=ymin+0.5,ymax=ymax+0.5,fill=family),alpha=0.5,show.legend=F)+
+  geom_vline(xintercept=0,col='black',linetype='dashed')+#coord_flip()+
   geom_errorbarh(aes(xmin=lwr2,xmax=upr2),height=0)+
   geom_errorbarh(aes(xmin=lwr1,xmax=upr1),height=0,size=2)+
   geom_point(size=3)+
-  facet_wrap(~par,scales='free_x',as.table=F)+
+  geom_label(data=textParams,aes(x=x,y=y+0.5,label=family),fill='gray90',col='black',size=4,hjust='left')+
   labs(y='Bee species',x='Slope Parameter')+
-  theme(axis.text.y=element_text(size=10),axis.text.x=element_text(size=10))
-ggsave('../Figures/coef_estimates.png',p1,width=10,height=6)
+  scale_fill_manual(values=c('white','gray70','gray50','gray70','gray50','gray70'))+
+  theme(axis.text.y=element_text(size=10),axis.text.x=element_text(size=10),strip.text=element_text(size=10))
+ggsave('../Figures/coef_estimates.png',p1,width=11,height=8.5)
+
+
+#To do: per-pass canola coefficients for all spp
+
+
 
 #Plot of population between years (from data)
 ggplot(temp,aes(midDate,Anthophora_terminalis,col=factor(year),group=paste(year,BLID,replicate)))+
