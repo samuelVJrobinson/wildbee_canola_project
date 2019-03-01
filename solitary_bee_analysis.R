@@ -205,7 +205,7 @@ invLogit <- function(x){
   i[is.nan(i)] <- 1 #If x is large enough, becomes Inf/Inf = NaN, but Lim(invLogit) x->Inf = 1
   return(i)
 }
-
+#Posterior predictive plots 
 PPplots <- function(resid,predResid,actual,pred,main=NULL){
   par(mfrow=c(2,1))
   plot(resid~predResid,ylab='Sum actual residuals',xlab='Sum simulated residuals',main=main)
@@ -217,6 +217,12 @@ PPplots <- function(resid,predResid,actual,pred,main=NULL){
   abline(0,1,col='red')
   abline(lm(actual~pred),col='red',lty=2)
   par(mfrow=c(1,1))
+}
+#Faster pair plots, using extracted lists
+fastPairs <- function(l){ #List l
+  pairs(l,lower.panel=function(x,y){
+    par(usr=c(0,1,0,1))
+    text(0.5, 0.5, round(cor(x,y),2), cex = 1 * exp(abs(cor(x,y))))})
 }
 
 
@@ -1350,10 +1356,7 @@ with(datalist,data.frame(rbind(t(apply(mod1$gpTrend2015,2,function(x) quantile(x
   geom_line(aes(y=med)) + geom_point(aes(y=resid)) + 
   facet_wrap(~year,ncol=1)+labs(y='Counts per week',x='Day of year',main=i)
 
-#Faster Pairplots
-pairs(mod1[c(pars,'lp__')],lower.panel=function(x,y){
-  par(usr=c(0,1,0,1))
-  text(0.5, 0.5, round(cor(x,y),2), cex = 1 * exp(abs(cor(x,y))))})
+
 
 #Plot of random intercepts - not really normal, so sigma2 has trouble centering.
 t(apply(mod1$b0_site,2,function(x) quantile(x,c(0.5,0.975,0.025)))) %>%
@@ -1513,7 +1516,97 @@ p1 <- coefs %>% mutate(spp=factor(spp,levels=nameOrder$spp)) %>% rowwise() %>%
 ggsave('../Figures/coef_estimates.png',p1,width=11,height=8.5)
 
 
-#To do: per-pass canola coefficients for all spp
+#Plots of canola attractiveness across spp.
+setwd("~/Projects/UofC/wildbee_canola_project/Models")
+
+#Get per-pass canola coefficients from models
+# getCoefs <- function(path){
+#   load(path)
+#   mod1 <- extract(modGP)
+#   a <- data.frame(spp=sub('.Rdata','',path),
+#                   par=c('canolaEffect1','canolaEffect2'),
+#                   meas=rbind(t(apply(mod1$canolaEffect,2,function(x) 
+#                     quantile(x,c(0.025,0.25,0.5,0.75,0.975))))))
+#   names(a)[3:7] <- c('lwr2','lwr1','med','upr1','upr2')
+#   rm(mod1,modGP); gc()
+#   return(a)
+# }
+# filepaths <- unname(sapply(c(wildSpp$pathName[1:20],'Overall'),function(x) {
+#   # x[1] <- tolower(x[1])
+#   x <- sub(' ','_',x)
+#   x <- paste(x,'.Rdata',sep='')
+#   return(x)
+# }))
+# coefs <- lapply(filepaths,getCoefs)
+# coefs <- do.call('rbind',coefs)
+# save(coefs,file='canolaCoefs.Rdata')
+load('canolaCoefs.Rdata')
+
+coefs <- coefs %>% mutate(spp=as.character(spp)) %>%
+  mutate(spp=paste(toupper(substr(spp,0,1)),substr(spp,2,nchar(spp)),sep='')) %>% #capitalize
+  mutate(spp=sub('_',' ',spp)) %>%
+  left_join(distinct(select(bees,genSpp,family)),by=c('spp'='genSpp')) %>%  #Join in family names
+  mutate(family=as.character(family)) %>%
+  mutate(family=ifelse(spp=='Overall','Overall',family)) %>% #Fix names
+  rowwise() %>%
+  mutate(spp=ifelse(grepl('_',spp),paste(strsplit(spp,' ')[[1]][1],strsplit(spp,'_')[[1]][2]),spp)) %>%
+  data.frame() %>%
+  mutate(param=as.character(par)) %>% select(-par) %>% 
+  # mutate(lwr2=ifelse(lwr2>-10,lwr2,-10)) %>% #Trim limits of x-axis
+  # filter(param!='SNLslope1') %>% #Strip out SNL slopes from year 1
+  mutate(param=factor(param,labels=c('Canola Bloom → Y1 Catches','Canola bloom → Y2 Catches')))
+
+nameOrder <- coefs %>% select(spp,family) %>% distinct() %>% 
+  mutate(family=factor(family,levels=c("Overall","Andrenidae","Apidae","Colletidae","Halictidae","Megachilidae"))) %>%
+  arrange(desc(family),desc(spp)) %>% mutate(spp=as.character(spp)) 
+
+#Parameters for rectangles
+rectParams1 <- nameOrder %>% mutate(family=factor(family,levels=levels(nameOrder$family)[length(levels(nameOrder$family)):1])) %>% 
+  group_by(family) %>% summarize(n=n()) %>% ungroup %>%
+  mutate(ymax=cumsum(n),ymin=lag(ymax)) %>% mutate(ymin=ifelse(is.na(ymin),0,ymin)) %>%
+  mutate(ymax=ymax,ymin=ymin) %>% select(-n) %>% 
+  unite(family,family:ymin)
+
+rectParams2 <- coefs %>% 
+  gather('est','quant',lwr2:upr2) %>% 
+  group_by(param) %>% summarize(xmax=max(quant),xmin=min(quant)) %>% 
+  unite(param,param:xmin)
+
+rectParams <- expand.grid(param=rectParams2$param,family=rectParams1$family) %>% 
+  separate(param,c('param','xmax','xmin'),sep='_',convert=T) %>% 
+  separate(family,c('family','ymax','ymin'),sep='_',convert=T) %>% 
+  mutate(param=factor(param,levels=levels(coefs$param))) %>% 
+  mutate(family=factor(family,levels=levels(nameOrder$family)))
+rm(rectParams1,rectParams2)
+
+#Parameters for text labels
+textParams <- rectParams %>% rowwise() %>% 
+  mutate(x=mean(xmax,xmin)-abs(xmax-xmin)*0.99,y=mean(ymax,ymin)-abs(ymax-ymin)*0.5) %>% 
+  mutate(x=ifelse(family=='Colletidae',2,x)) %>% 
+  select(-ymax,-ymin,-xmax,-xmin) %>% 
+  mutate(family=as.character(family),keep=param=='Canola Bloom → Y1 Catches'&family!='Overall') %>% 
+  mutate(family=ifelse(keep,family,NA),x=ifelse(keep,x,NA),y=ifelse(keep,y,NA)) %>% select(-keep) 
+
+p1 <- coefs %>% mutate(spp=factor(spp,levels=nameOrder$spp)) %>% rowwise() %>% 
+  ggplot(aes(x=med,y=spp))+
+  facet_wrap(~param,scales='free_x',ncol=4)+
+  geom_rect(data=rectParams,aes(x=NULL,y=NULL,xmin=xmin,xmax=xmax,ymin=ymin+0.5,ymax=ymax+0.5,fill=family),alpha=0.5,show.legend=F)+
+  geom_vline(xintercept=0,col='black',linetype='dashed')+
+  geom_errorbarh(aes(xmin=lwr2,xmax=upr2),height=0)+
+  geom_errorbarh(aes(xmin=lwr1,xmax=upr1),height=0,size=2)+
+  geom_point(size=3)+
+  labs(y='Bee species',x='Slope Parameter')+
+  geom_label(data=textParams,aes(x=x,y=y+0.5,label=family),fill='gray90',col='black',size=4,hjust='left')+
+  scale_fill_manual(values=c('white','gray70','gray50','gray70','gray50','gray70'))+
+  theme(axis.text.y=element_text(size=10),axis.text.x=element_text(size=10),strip.text=element_text(size=10))
+ggsave('../Figures/canolaEstimates.png',p1,width=11,height=8.5)
+
+
+#Megachile perihirta and Osmia sp1 appear to be positively & negatively (respectively) affected by adjacent canola bloom in Y1 only. Check that these parameters aren't correlated with other ones. No super obvious correlations for M.p. 
+
+load(paste0(wildSpp$pathName[c(15,18)],'.Rdata')[2])
+mod1 <- extract(modGP)
+fastPairs(mod1[c('rho','alpha','b0','sigma_site','SNLslope','slopeCanolaOverlap','canolaEffect')])
 
 
 
