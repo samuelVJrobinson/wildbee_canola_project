@@ -225,25 +225,37 @@ fastPairs <- function(l){ #List l
     text(0.5, 0.5, round(cor(x,y),2), cex = 1 * exp(abs(cor(x,y))))})
 }
 
-
-
-
-
-
-
 # Basic abundance plots ---------------------------------------------------
 
 #Summary of species
-group_by(bees,genSpp) %>%
+
+
+fixNames <- function(a){ #Fix names of morphospecies
+  if(length(a)>1) stop('Name not specified correctly')
+  paste0(strsplit(a,' ')[[1]][1],' (',
+         strsplit(strsplit(a,' ')[[1]][2],'_')[[1]][1],
+         ') ',strsplit(a,'_')[[1]][2])
+}
+
+p1 <- group_by(bees,genSpp) %>%
   filter(agricultural==F) %>% #Filter agricultural
   summarize(number=n(),parasitoid=first(parasitoid)) %>%
-  filter(number>5) %>%
-  arrange(desc(number)) %>%
-  mutate(genSpp=factor(genSpp,levels=.$genSpp)) %>%
+  filter(number>5) %>%  arrange(desc(number)) %>% 
+  rowwise() %>% 
+  mutate(genSpp=ifelse(grepl('_',genSpp),fixNames(genSpp),genSpp)) %>%
+  mutate(genSpp=factor(genSpp,levels=.$genSpp)) %>% ungroup() %>% 
+  arrange(genSpp) %>% 
+  mutate(parasitoid=factor(parasitoid,labels=c('Non-parasitic','Nest parasite'))) %>% 
   ggplot(aes(genSpp,number,fill=parasitoid))+geom_col()+
   theme(axis.text.x=element_text(angle=90,vjust=0.25,size=7))+
-  labs(x='Spp',y='Count')+scale_fill_manual(values=c('black','red'))+
-  scale_y_sqrt()
+  labs(x='Species',y='Count',fill='Cleptoparasite')+scale_fill_manual(values=c('black','red'))+
+  # scale_y_sqrt()+
+  theme(panel.grid.major=element_line(size=0.5,colour='grey90',linetype='solid'),
+         panel.grid.minor=element_blank(),axis.text.x=element_text(hjust=1))+
+  theme(legend.position=c(0.8,0.9),legend.background=element_rect(fill='white',colour='black',linetype='solid'),
+        legend.title=element_blank(),legend.text=element_text(size=12))
+  
+ggsave('./Figures/countsSpp.png',p1,width=10,height=6)
 
 #Broken down by family
 group_by(bees,genSpp) %>%
@@ -269,17 +281,39 @@ group_by(bees,genus) %>%
   theme(axis.text.x=element_text(angle=90,vjust=0.25,size=7))+
   labs(x='Genus',y='Count')+scale_fill_manual(values=c('black','red'))
 
-#Broken down by family
-group_by(bees,genus) %>%
+#Genus counts broken down by family & year
+p1 <- group_by(bees,genus,year) %>%
   filter(agricultural==F) %>% #Filter agricultural
   summarize(number=n(),parasitoid=first(parasitoid),family=first(family)) %>%
-  #filter(number>5) %>%
-  arrange(desc(number)) %>%
-  mutate(genus=factor(genus,levels=.$genus)) %>%
+  ungroup() %>% arrange(desc(number)) %>%
+  mutate(parasitoid=factor(parasitoid,labels=c('Non-parasitic','Nest parasite'))) %>% 
+  mutate(genus=factor(genus,levels=unique(genus))) %>%
   ggplot(aes(genus,number,fill=parasitoid))+geom_col()+
   theme(axis.text.x=element_text(angle=90,vjust=0.25,size=7))+
-  labs(x='Genus',y='Count')+scale_fill_manual(values=c('black','red'))+
-  facet_wrap(~family,scales='free_x',nrow=1)
+  labs(x='Genus',y='Count',fill='Cleptoparasite')+scale_fill_manual(values=c('black','red'))+
+  facet_grid(year~family,scales='free_x')+
+  theme(panel.grid.major=element_line(size=0.5,colour='grey90',linetype='solid'),
+        panel.grid.minor=element_blank(),axis.text.x=element_text(hjust=1,size=10))+
+  theme(legend.position=c(0.9,0.9),legend.background=element_rect(fill='white',colour='black',linetype='solid'),
+        legend.title=element_blank(),legend.text=element_text(size=12))
+ggsave('./Figures/countsFamilyYear.png',p1,width=10,height=8)
+
+#Summary statistics
+bees %>% filter(!parasitoid,!agricultural) %>% 
+  group_by(BLID,year) %>% 
+  summarize(count=n(),weeks=sum(deployedHours/(24*7)),catchRate=count/weeks) %>% 
+  select(BLID,year,catchRate) %>% mutate(year=paste0('y',year)) %>% 
+  spread(year,catchRate) %>% data.frame() %>% 
+  with(.,lm(y2016~y2015)) %>% summary()
+  
+  ggplot(aes(y2015,y2016))+geom_point()+geom_abline(intercept=0,slope=1)+
+  labs(x='Catches/week 2015',y='Catches/week 2016')
+
+#Catches per week - similar across years
+bees %>% filter(!parasitoid,!agricultural) %>% 
+  group_by(BLID,year) %>% 
+  summarize(count=n(),weeks=sum(deployedHours/(24*7)),catchRate=count/weeks) %>% 
+  group_by(year) %>% summarize(meanCatch=mean(catchRate),sdCatch=sd(catchRate))
 
 
 # Other plots -------------------------------------------------------------
@@ -1220,7 +1254,8 @@ temp <- wildBees %>% mutate(genSpp=factor(genSpp,levels=wildSpp$genSpp,labels=gs
   gather('genSpp','count',contains("_")) %>% 
   mutate(count=ifelse(is.na(count),0,count)) %>% #Changes NAs to zeros
   select(-ID) %>% mutate(BLID=factor(BLID)) %>% arrange(genSpp,year,BLID,pass) %>%
-  spread(genSpp,count) %>%  mutate(traplength=(endDate-startDate)/7) %>% #Trapping period (in weeks)
+  spread(genSpp,count) %>%  
+  mutate(traplength=(endDate-startDate)/7) %>% #Trapping period (in weeks)
   mutate(centDate=(midDate-mean(midDate))/7) %>%  #Centers midDate (around 206.41) and converts to week 
   mutate(centEndDate=(endDate-mean(midDate))/7) %>%  #Centers endDate and coverts to week
   group_by(year,BLID) %>% 
@@ -1314,7 +1349,7 @@ pars <- c('rho','alpha','b0','sigma_site','SNLslope','slopeLastYear','slopeCanol
 #Make basic diagnostic plots for each model
 for(i in c(wildSpp$pathName[1:20],'Overall')){
   load(paste0(i,'.Rdata'))
-  p1 <- stan_hist(modGP,pars=pars)+labs(title=i) #Posterior distributions
+  p1 <- stan_hist(modGP,pars=pars)+labs(title=i)+geom_vline(xintercept=0,linetype='dashed') #Posterior distributions
   ggsave(paste0('../Figures/Diagnostic Plots/',i,'_dist.png'),p1,width=12,height=8)
   p2 <- traceplot(modGP,pars=pars) #Traceplot
   ggsave(paste0('../Figures/Diagnostic Plots/',i,'_trace.png'),p2,width=12,height=8)
@@ -1344,6 +1379,10 @@ for(i in c(wildSpp$pathName[1:20],'Overall')){
 #Hylaeus sp9 - 17
 
 #Plot of Gaussian processes for each year
+i <- 'Overall.Rdata'
+load(i)
+mod1 <- extract(modGP)
+if(grepl('Overall',i)) act <- rowSums(temp[,c(9:96)]) else act <- temp[,i]
 with(datalist,data.frame(rbind(t(apply(mod1$gpTrend2015,2,function(x) quantile(x,c(0.05,0.5,0.95))))[dateIndex2015,c(1:3)],
                                t(apply(mod1$gpTrend2016,2,function(x) quantile(x,c(0.05,0.5,0.95))))[dateIndex2016,c(1:3)]),
                          day=c(centDates2015[dateIndex2015],centDates2016[dateIndex2016]),
@@ -1355,7 +1394,6 @@ with(datalist,data.frame(rbind(t(apply(mod1$gpTrend2015,2,function(x) quantile(x
   ggplot(aes(day,group=year))+geom_ribbon(aes(ymax=upr,ymin=lwr),alpha=0.3)+
   geom_line(aes(y=med)) + geom_point(aes(y=resid)) + 
   facet_wrap(~year,ncol=1)+labs(y='Counts per week',x='Day of year',main=i)
-
 
 
 #Plot of random intercepts - not really normal, so sigma2 has trouble centering.
@@ -1468,12 +1506,13 @@ coefs <- coefs %>% mutate(spp=as.character(spp)) %>%
   mutate(lwr2=ifelse(lwr2>-10,lwr2,-10)) %>% #Trim limits of x-axis
   # filter(param!='SNLslope1') %>% #Strip out SNL slopes from year 1
   mutate(param=factor(param,levels=c('SNLslope1','SNLslope2','slopeLastYear','slopeCanolaOverlap'),
-                      labels=c('Semi-natural → Y1 Abundance','Semi-natural → Y2 Abundance',
-                                     'Y1 Abundance → Y2 Abundance ','Y1 Canola → Y2 Abundance')))
+                      labels=c('Semi-natural → Counts 2015','Semi-natural → Counts 2016',
+                                     'Counts 2015 → Counts 2016 ','Canola Overlap 2015 → Counts 2016')))
 
 nameOrder <- coefs %>% select(spp,family) %>% distinct() %>% 
   mutate(family=factor(family,levels=c("Overall","Andrenidae","Apidae","Colletidae","Halictidae","Megachilidae"))) %>%
-  arrange(desc(family),desc(spp)) %>% mutate(spp=as.character(spp)) 
+  arrange(desc(family),desc(spp)) %>% mutate(spp=as.character(spp)) %>% 
+  slice(c(1:3,6,4,5,7:n()))
 
 #Parameters for rectangles
 rectParams1 <- nameOrder %>% mutate(family=factor(family,levels=levels(nameOrder$family)[length(levels(nameOrder$family)):1])) %>% 
@@ -1498,7 +1537,7 @@ rm(rectParams1,rectParams2)
 textParams <- rectParams %>% rowwise() %>% 
   mutate(x=mean(xmax,xmin)-abs(xmax-xmin)*0.99,y=mean(ymax,ymin)-abs(ymax-ymin)*0.5) %>% 
   select(-ymax,-ymin,-xmax,-xmin) %>% 
-  mutate(family=as.character(family),keep=param=='Semi-natural → Y1 Abundance'&family!='Overall') %>% 
+  mutate(family=as.character(family),keep=param=='Semi-natural → Counts 2015'&family!='Overall') %>% 
   mutate(family=ifelse(keep,family,NA),x=ifelse(keep,x,NA),y=ifelse(keep,y,NA)) %>% select(-keep)
 
 p1 <- coefs %>% mutate(spp=factor(spp,levels=nameOrder$spp)) %>% rowwise() %>% 
@@ -1554,11 +1593,12 @@ coefs <- coefs %>% mutate(spp=as.character(spp)) %>%
   mutate(param=as.character(par)) %>% select(-par) %>% 
   # mutate(lwr2=ifelse(lwr2>-10,lwr2,-10)) %>% #Trim limits of x-axis
   # filter(param!='SNLslope1') %>% #Strip out SNL slopes from year 1
-  mutate(param=factor(param,labels=c('Canola Bloom → Y1 Catches','Canola bloom → Y2 Catches')))
+  mutate(param=factor(param,labels=c('Canola Abundance 2015 → Counts 2015','Canola Abundance 2016 → Counts 2016')))
 
 nameOrder <- coefs %>% select(spp,family) %>% distinct() %>% 
   mutate(family=factor(family,levels=c("Overall","Andrenidae","Apidae","Colletidae","Halictidae","Megachilidae"))) %>%
-  arrange(desc(family),desc(spp)) %>% mutate(spp=as.character(spp)) 
+  arrange(desc(family),desc(spp)) %>% mutate(spp=as.character(spp)) %>% 
+  slice(c(1:3,6,4,5,7:n()))
 
 #Parameters for rectangles
 rectParams1 <- nameOrder %>% mutate(family=factor(family,levels=levels(nameOrder$family)[length(levels(nameOrder$family)):1])) %>% 
@@ -1582,9 +1622,9 @@ rm(rectParams1,rectParams2)
 #Parameters for text labels
 textParams <- rectParams %>% rowwise() %>% 
   mutate(x=mean(xmax,xmin)-abs(xmax-xmin)*0.99,y=mean(ymax,ymin)-abs(ymax-ymin)*0.5) %>% 
-  mutate(x=ifelse(family=='Colletidae',2,x)) %>% 
+  mutate(x=ifelse(family=='Colletidae',1,x)) %>% 
   select(-ymax,-ymin,-xmax,-xmin) %>% 
-  mutate(family=as.character(family),keep=param=='Canola Bloom → Y1 Catches'&family!='Overall') %>% 
+  mutate(family=as.character(family),keep=param=='Canola Abundance 2015 → Counts 2015'&family!='Overall') %>% 
   mutate(family=ifelse(keep,family,NA),x=ifelse(keep,x,NA),y=ifelse(keep,y,NA)) %>% select(-keep) 
 
 p1 <- coefs %>% mutate(spp=factor(spp,levels=nameOrder$spp)) %>% rowwise() %>% 
@@ -1599,7 +1639,7 @@ p1 <- coefs %>% mutate(spp=factor(spp,levels=nameOrder$spp)) %>% rowwise() %>%
   geom_label(data=textParams,aes(x=x,y=y+0.5,label=family),fill='gray90',col='black',size=4,hjust='left')+
   scale_fill_manual(values=c('white','gray70','gray50','gray70','gray50','gray70'))+
   theme(axis.text.y=element_text(size=10),axis.text.x=element_text(size=10),strip.text=element_text(size=10))
-ggsave('../Figures/canolaEstimates.png',p1,width=11,height=8.5)
+ggsave('../Figures/canolaEstimates.png',p1,width=8,height=10)
 
 
 #Megachile perihirta and Osmia sp1 appear to be positively & negatively (respectively) affected by adjacent canola bloom in Y1 only. Check that these parameters aren't correlated with other ones. No super obvious correlations for M.p. 
