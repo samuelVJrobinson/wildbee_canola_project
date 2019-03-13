@@ -225,18 +225,27 @@ fastPairs <- function(l){ #List l
     text(0.5, 0.5, round(cor(x,y),2), cex = 1 * exp(abs(cor(x,y))))})
 }
 
+#Fix names of morphospecies (if subgenus listed) 
+#eg. "Lasioglossum dialictus_sp17" -> "Lasioglossum (Dialictus) spp.17"
+#eg. "Lasioglossum_dialictus_sp17" -> "Lasioglossum (Dialictus) spp.17"
+fixNames <- function(a){ 
+  if(length(a)>1) stop('Name not specified correctly')
+  if(!grepl('_',a)) stop('No underscores found')
+  
+  #Extract substrings
+  #If more than 1 underscore, use underscore as splitting character rather than space
+  splitchar <- ifelse(nchar(a)-nchar(gsub('_','',a))>1,'_',' ') #Splitting character
+  pt1 <- strsplit(a,splitchar)[[1]][1] #Genus name
+  pt2 <- strsplit(strsplit(a,splitchar)[[1]][2],'_')[[1]][1] #Subgenus name (non-capitalized)
+  pt3 <- strsplit(a,'_')[[1]][length(strsplit(a,'_')[[1]])] #Spp + Number
+  pt2 <- paste0(toupper(substr(pt2,0,1)),substr(pt2,2,nchar(pt2))) #Capitalize subgenus name
+  pt3 <- paste0('spp.',substr(pt3,3,nchar(pt3))) #Add spp. to pt3
+  return(paste0(pt1,' (',pt2,') ',pt3)) #Paste parts 1-3 together
+}
+
 # Basic abundance plots ---------------------------------------------------
 
 #Summary of species
-
-
-fixNames <- function(a){ #Fix names of morphospecies
-  if(length(a)>1) stop('Name not specified correctly')
-  paste0(strsplit(a,' ')[[1]][1],' (',
-         strsplit(strsplit(a,' ')[[1]][2],'_')[[1]][1],
-         ') ',strsplit(a,'_')[[1]][2])
-}
-
 p1 <- group_by(bees,genSpp) %>%
   filter(agricultural==F) %>% #Filter agricultural
   summarize(number=n(),parasitoid=first(parasitoid)) %>%
@@ -1232,9 +1241,9 @@ wildSpp <- filter(bees,BLID %in% year2year,!agricultural)  %>%
   mutate(notZero=(y2015>0&y2016>0),diff=abs(y2015-y2016),total=y2015+y2016) %>%
   filter(notZero) %>% #Filter years with zero in one year
   # filter((diff/total)<0.5) %>% #Filter sp where magnitude of yearly difference is less than 50% of total count
-  arrange(desc(total)) %>% mutate(pathName=gsub(' ','_',genSpp))
-  # top_n(20,total) %>%
-
+  arrange(desc(total)) %>% mutate(pathName=gsub(' ','_',genSpp)) %>% #Create path name for files
+  rowwise() %>% mutate(labelName=ifelse(grepl('_',genSpp),fixNames(genSpp),genSpp)) %>% ungroup 
+  
 #Occurance data for top 20 bees
 wildBees <- filter(bees,BLID %in% year2year) %>%
   filter(genSpp %in% wildSpp$genSpp)
@@ -1331,16 +1340,19 @@ inits <- function() { with(datalist,
 #   ggplot(aes(dates,count))+geom_point()+geom_line(aes(group=site))+facet_wrap(~year)+
 #   scale_y_log10()
 
-# #Run Overall model
-# datalist$count <- rowSums(temp[,c(9:96)]) #Sum all of bee spp
-# modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
-# save(modGP,file='Overall.Rdata')
-# 
+#Run Overall model
+datalist$count <- rowSums(temp[,c(9:96)]) #Sum all of bee spp
+modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
+save(modGP,file='Overall.Rdata')
+
 #Run model for top 20 bees
-for(i in wildSpp$pathName[1:20]){
+
+#Need to redo Lasioglossum_leucozonium and Dufourea_maura
+for(i in wildSpp$pathName[c(1:20)]){
   datalist$count <- temp[,i] 
-  modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
+  modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.85),init=inits)
   save(modGP,file=paste0(i,'.Rdata'))
+  print(paste('Finished',i))
 }
 
 pars <- c('rho','alpha','b0','sigma_site','SNLslope','slopeLastYear','slopeCanolaOverlap','canolaEffect','phi','thetaZI')
@@ -1369,31 +1381,19 @@ for(i in c(wildSpp$pathName[1:20],'Overall')){
 }
 
 #Notes:
+
+
+
 #Bad traces for site level sigma. Could be due to poor sample size?
 #Andrena medionitens - 20
 #Osmia melanosmia - 18
+#Hylaeus sp9 - 17
+#Lasioglossum leucozonium
 
 #Marginal traces for site level sigma:
 #Anthophora occidentalis - 19
 #Dufourea maura - 12
-#Hylaeus sp9 - 17
-
-#Plot of Gaussian processes for each year
-i <- 'Overall.Rdata'
-load(i)
-mod1 <- extract(modGP)
-if(grepl('Overall',i)) act <- rowSums(temp[,c(9:96)]) else act <- temp[,i]
-with(datalist,data.frame(rbind(t(apply(mod1$gpTrend2015,2,function(x) quantile(x,c(0.05,0.5,0.95))))[dateIndex2015,c(1:3)],
-                               t(apply(mod1$gpTrend2016,2,function(x) quantile(x,c(0.05,0.5,0.95))))[dateIndex2016,c(1:3)]),
-                         day=c(centDates2015[dateIndex2015],centDates2016[dateIndex2016]),
-                         year=c(rep(1,length(dateIndex2015)),rep(2,length(dateIndex2016))),
-                         resid=log(act/(apply(mod1$count_resid,2,median)+act)))) %>% #Log-residual
-  rename(lwr=X5.,med=X50.,upr=X95.) %>%
-  mutate(resid=resid+med,day=(day*7+206.41),year=factor(year,labels=c('2015','2016'))) %>% 
-  mutate_at(vars(lwr:upr,resid),exp) %>%
-  ggplot(aes(day,group=year))+geom_ribbon(aes(ymax=upr,ymin=lwr),alpha=0.3)+
-  geom_line(aes(y=med)) + geom_point(aes(y=resid)) + 
-  facet_wrap(~year,ncol=1)+labs(y='Counts per week',x='Day of year',main=i)
+#Lasioglossum sp5
 
 
 #Plot of random intercepts - not really normal, so sigma2 has trouble centering.
@@ -1451,6 +1451,55 @@ mutate(tempDat,expY1=median(mod1$slopeCanolaOverlap)*canolaOverlap) %>%
   # geom_smooth(method='lm',col='red')+
   labs(x='Canola overlap in year 1',y='Abundance in year 2')
 
+#Plot of Gaussian processes for each year
+gpResAll <- data.frame() #Empty data frame
+
+for(i in c(wildSpp$pathName[1:20],'Overall')){
+  load(paste0(i,'.Rdata'))
+  mod1 <- extract(modGP)
+  if(grepl('Overall',i)) act <- rowSums(temp[,c(9:96)]) else act <- temp[,i]
+  
+  #Working residuals: (actual-expected)/expected
+  workRes <- (act/apply(with(mod1,exp(mu)*(1-thetaZI[,datalist$year])),2,median))-1 #Expected value
+  #Marginalized effects from Y1
+  margY1 <- 
+    
+  mod1$SNLslope[,1]*mean(datalist$percSNL)+
+    
+      apply(mod1$predCanolaPass[,datalist$year==1],2,mean)
+  
+  plot(apply(mod1$predCanolaPass[,datalist$year==1],2,mean))
+  
+  
+  
+  #GP trend for each year
+  y1 <- with(datalist,t(apply(mod1$gpTrend2015+mod1$b0[,1],2,function(x) quantile(x,c(0.05,0.5,0.95))))[dateIndex2015,c(1:3)])
+  y2 <- with(datalist,t(apply(mod1$gpTrend2016+mod1$b0[,2],2,function(x) quantile(x,c(0.05,0.5,0.95))))[dateIndex2016,c(1:3)])
+  
+  #Assemble GP trend along with dates, year, residual
+  gpResTemp <- with(datalist,data.frame(rbind(y1,y2),day=c(centDates2015[dateIndex2015],centDates2016[dateIndex2016]),
+                                        year=c(rep(1,length(dateIndex2015)),rep(2,length(dateIndex2016))))) %>% 
+                                        # resid=log(act/(apply(mod1$count_resid,2,median)+act)))) %>% #Log-residual
+    rename(lwr=X5.,med=X50.,upr=X95.) %>%
+    mutate(resid=(act/exp(med))-1, #Working residual (proportion difference from expected)
+           day=(day*7+206.41),year=factor(year,labels=c('2015','2016')),spp=i)
+  gpResAll <- rbind(gpResAll,gpResTemp) #Combine with others
+  print(paste('Finished',i))
+}
+
+#Create overall figure of Gaussian process model
+p1 <- gpResAll %>% mutate_at(vars(lwr:upr),exp) %>% 
+  mutate(resid=med+(resid*med)) %>% 
+  mutate(year=factor(year)) %>%
+  mutate(spp=factor(spp,levels=c('Overall',wildSpp$pathName),labels=c('Overall',wildSpp$labelName))) %>% 
+  ggplot(aes(day,group=year))+geom_ribbon(aes(ymax=upr,ymin=lwr,fill=year),alpha=0.3,show.legend=F)+
+  geom_line(aes(y=med,col=year),size=1) + geom_point(aes(y=resid,col=year),alpha=0.5,size=0.75) + 
+  facet_wrap(~spp,scales='free_y')+labs(y='Counts per week',x='Day of year',col='Year',main=i)+
+  scale_colour_manual(values=c('red','blue'))+scale_fill_manual(values=c('red','blue'))+
+  theme(strip.text=element_text(size=9),axis.text=element_text(size=12))+
+  theme(legend.position=c(0.9,0.05),legend.background=element_rect(fill='white',colour='black',linetype='solid'),
+        legend.title=element_text(size=15),legend.text=element_text(size=12))
+ggsave('../Figures/GPtrends.png',p1,width=12,height=8.5)
 
 #Plot canola bloom
 p1 <- with(mod1,data.frame(canolaBloom=datalist$canolaBloom,centEndDate=round((datalist$centBloomDate)*7+206.41),
@@ -1469,7 +1518,7 @@ p1 <- with(mod1,data.frame(canolaBloom=datalist$canolaBloom,centEndDate=round((d
 ggsave('../Figures/bloomModel.png',p1,width=8,height=6)
 
 
-#Get all main coefficients from models
+# Get all main coefficients from models
 # getCoefs <- function(path){
 #   load(path)
 #   mod1 <- extract(modGP)

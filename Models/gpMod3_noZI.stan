@@ -83,7 +83,7 @@ parameters {
 	real slopeCanolaOverlap; //Effect of last year's canola overlap on this year's abundance	
 	real canolaEffect[2]; //Effect of canola abundance on per-pass bee count
 	real<lower=0> phi[2]; //Dispersion parameter for neg. bin.
-	real<lower=0,upper=1> thetaZI[2]; //Zero-inflation process for each year
+	// real<lower=0,upper=1> thetaZI[2]; //Zero-inflation process for each year
 	
 	//Canola bloom parameters - 1 for each year
 	real muDateCanola[2]; //Peak bloom time
@@ -194,30 +194,12 @@ transformed parameters {
 }
 
 model {
-	//Log-likelihood for zero-inflated NB	
-	matrix[2,2] bernLL; //pre-calculated LL for zero inflation process	
-	vector[N] totalLL; //LL for ZI-negbin process		
+	//Log-likelihood for zero-inflated NB		
 	vector[N] phiVector = rep_vector(phi[1],N); //Assign phi[1] and phi[2] to a vector	
 	phiVector[1+NperYear[1]:N] = rep_vector(phi[2],NperYear[2]);
-	
-	//Calculate LL for bernoulli process
-	bernLL[1,1]=bernoulli_lpmf(0|thetaZI[1]); //LL of no extra zero - year 1
-	bernLL[2,1]=bernoulli_lpmf(1|thetaZI[1]); //LL of extra zero			
-	bernLL[1,2]=bernoulli_lpmf(0|thetaZI[2]); //LL of no extra zero - year 2
-	bernLL[2,2]=bernoulli_lpmf(1|thetaZI[2]); //LL of extra zero
-	//Calculate LL for negbin process + LL of no extra zero
-	for(i in 1:N){
-		totalLL[i] = neg_binomial_2_log_lpmf(count[i]|mu[i],phiVector[i]);
-	}	
-	totalLL[1:NperYear[1]] = totalLL[1:NperYear[1]] + rep_vector(bernLL[1,1],NperYear[1]);
-	totalLL[NperYear[1]+1:N] = totalLL[NperYear[1]+1:N] + rep_vector(bernLL[1,2],NperYear[2]);
-	
-	for(i in 1:N){	
-		if(count[i]==0)
-			totalLL[i] = log_sum_exp(totalLL[i],bernLL[2,year[i]]);						 
-	}	
-	target += sum(totalLL); //Increment LL	
-	
+
+	count ~ neg_binomial_2_log(mu,phiVector);
+		
 	//Priors	
 	//Gaussian process - 1 for each year
 	rho ~ inv_gamma(7.5,15); //Informative prior for length-scale	
@@ -243,11 +225,10 @@ model {
 	// b0err ~ gamma(1,b0sd);	
 	
 	SNLslope ~ normal(0,3); //Prior for effect of SNL		
-	slopeLastYear ~ normal(0,1); //Effect of last year's intercept
+	slopeLastYear ~ normal(0,3); //Effect of last year's intercept
 	// intLastYear ~ normal(0,3); //Interaction b/w SNL and last year's intercept
 	canolaEffect ~ normal(0,3);	
-	phi ~ gamma(2,2); //Prior for NB dispersion parameter 		
-	thetaZI ~ beta(3,7); //Prior for ZI parameter
+	phi ~ gamma(2,2); //Prior for NB dispersion parameter 			
 	
 	//Canola bloom - informative priors
 	muDateCanola ~ normal(-1,1); //Mean bloom date	
@@ -282,12 +263,9 @@ generated quantities {
 	}	
 		
 	for(i in 1:N){ //Bee count residuals
-		real expected = exp(mu[i])*(1-thetaZI[year[i]]); //Expected value
+		real expected = exp(mu[i]); //Expected value
 		count_resid[i] = expected - count[i]; //Residual for actual value
-		if(bernoulli_rng(thetaZI[year[i]])==1)
-			predCount[i] = 0;
-		else
-			predCount[i] = neg_binomial_2_log_rng(mu[i],phi[year[i]]); //Simulate bee counts					
+		predCount[i] = neg_binomial_2_log_rng(mu[i],phi[year[i]]); //Simulate bee counts					
 		predCount_resid[i] = expected - predCount[i]; //Residual for simulated bee counts
 	}
 		
