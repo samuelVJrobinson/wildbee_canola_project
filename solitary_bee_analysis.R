@@ -195,8 +195,32 @@ trap[trap$BLID==20001 & trap$year==2015 & trap$pass==1,'canolaBloom'] <- NA
 trap[trap$BLID==10781 & trap$year==2015 & trap$pass==2,'canolaBloom'] <- NA
 trap[trap$BLID==14376 & trap$year==2016 & (trap$pass==1|trap$pass==3),'canolaBloom'] <- NA
 
-#Convenience functions
+#Get distance matrix from trap latitude and longitude
+library(sp)
+library(maptools)
+library(rgdal)
+library(rgeos)
 
+trapCoords <- df2 %>% select(BLID:lat) %>% group_by(BLID) %>%  #Get lat and lon
+  summarize(lon=first(lon),lat=first(lat)) %>% 
+  data.frame()
+
+coordinates(trapCoords)=~lon+lat 
+proj <- CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0") #Initial projection (latlon) to set
+proj4string(trapCoords) <- proj #Set projection
+newproj <- CRS("+init=epsg:32612") #CRS for UTM 12
+trapCoords <- spTransform(trapCoords,newproj) #Transform to UTM 12
+distMat <- gDistance(trapCoords,byid=T) #Get distance matrix between sites
+colnames(distMat) <- rownames(distMat) <- trapCoords$BLID #Rename rows and columns
+distMat <- distMat/10000 #Scales distances to 10s of kms
+
+#Detach spatial stats packages
+detach("package:rgdal", unload=TRUE)
+detach("package:sp", unload=TRUE)
+detach("package:maptools", unload=TRUE)
+detach("package:rgeos", unload=TRUE)
+
+#Convenience functions
 logit <- function(x){
   return(log(x/(1-x)))
 }
@@ -242,6 +266,7 @@ fixNames <- function(a){
   pt3 <- paste0('spp.',substr(pt3,3,nchar(pt3))) #Add spp. to pt3
   return(paste0(pt1,' (',pt2,') ',pt3)) #Paste parts 1-3 together
 }
+
 
 # Basic abundance plots ---------------------------------------------------
 
@@ -1315,7 +1340,8 @@ datalist <- with(temp, #Data to feed into STAN
                 centBloomDate=centEndDate[!is.na(canolaBloom)], #Centered end date (used for canola bloom)
                 canolaBloom=canolaBloom[!is.na(canolaBloom)], #Observed canola bloom
                 bloomIndex=as.numeric(which(!is.na(canolaBloom))), #Index for matching missing observed canola bloom
-                nearCanola=as.numeric(nearCanola[!is.na(canolaBloom)]) #Was field during that year near canola?
+                nearCanola=as.numeric(nearCanola[!is.na(canolaBloom)]), #Was field during that year near canola?
+                distMat=distMat #Distance matrix for sites
               )
 )
 
@@ -1330,7 +1356,9 @@ str(datalist)
 #Initial values
 inits <- function() { with(datalist,
    list(rho=c(1.7,0.8),alpha=c(1.2,0.8),b0=c(-1.8,-2.1),b0_site=rep(0,Nsite*1),
-        sigma_site=c(0.7),SNLslope=c(0.9,0),slopeLastYear=0.6,slopeCanolaOverlap=-0.3,
+        sigma_site=c(1),
+        rhoDist=1,alphaDist=1,
+        SNLslope=c(0.9,0),slopeLastYear=0.6,slopeCanolaOverlap=-0.3,
         canolaEffect=c(-0.15,0.13),phi=c(1.5,0.9),
         muDateCanola=c(-2,-1),sigmaDateCanola=c(1.5,1.5),ampCanola=c(75,97)
    ))
@@ -1339,29 +1367,28 @@ inits <- function() { with(datalist,
 # with(datalist,data.frame(dates=centDate,count,year,site)) %>% 
 #   ggplot(aes(dates,count))+geom_point()+geom_line(aes(group=site))+facet_wrap(~year)+
 #   scale_y_log10()
-
+# 
 #Run Overall model
 datalist$count <- rowSums(temp[,c(9:96)]) #Sum all of bee spp
-modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.8),init=inits)
+modGP <- stan(file='gpMod3_spatial.stan',data=datalist,iter=2000,chains=3,control=list(adapt_delta=0.85),init=inits)
 save(modGP,file='Overall.Rdata')
 
 #Run model for top 20 bees
-
-#Need to redo Lasioglossum_leucozonium and Dufourea_maura
 for(i in wildSpp$pathName[c(1:20)]){
   datalist$count <- temp[,i] 
-  modGP <- stan(file='gpMod3.stan',data=datalist,iter=1000,chains=3,control=list(adapt_delta=0.85),init=inits)
+  modGP <- stan(file='gpMod3_spatial.stan',data=datalist,iter=2000,chains=3,control=list(adapt_delta=0.85),init=inits)
+  
   save(modGP,file=paste0(i,'.Rdata'))
   print(paste('Finished',i))
 }
 
-pars <- c('rho','alpha','b0','sigma_site','SNLslope','slopeLastYear','slopeCanolaOverlap','canolaEffect','phi','thetaZI')
+pars <- c('rho','alpha','b0','rhoDist','alphaDist','SNLslope','slopeLastYear','slopeCanolaOverlap','canolaEffect','phi','thetaZI')
 # pars=c('muCanola','sigmaCanola','ampCanola','residCanola') #OK
 
 #Make basic diagnostic plots for each model
 for(i in c(wildSpp$pathName[1:20],'Overall')){
   load(paste0(i,'.Rdata'))
-  p1 <- stan_hist(modGP,pars=pars)+labs(title=i)+geom_vline(xintercept=0,linetype='dashed') #Posterior distributions
+  p1 <- stan_hist(modGP,pars=pars)+labs(title=i)+geom_vline(xintercept=0,linetype='dashed') #Posterior distribution
   ggsave(paste0('../Figures/Diagnostic Plots/',i,'_dist.png'),p1,width=12,height=8)
   p2 <- traceplot(modGP,pars=pars) #Traceplot
   ggsave(paste0('../Figures/Diagnostic Plots/',i,'_trace.png'),p2,width=12,height=8)
@@ -1369,31 +1396,48 @@ for(i in c(wildSpp$pathName[1:20],'Overall')){
   
   #Actual counts
   if(i=='Overall') act <- rowSums(temp[,c(9:96)]) else act <- temp[,i]
-  
+
   #PP plots
-  png(file =paste0('../Figures/Diagnostic Plots/',i,'_PP.png'), 
+  png(file =paste0('../Figures/Diagnostic Plots/',i,'_PP.png'),
       width=6,height=12,units='in',res=100,bg = "white")
   with(mod1,PPplots(apply(count_resid,1,function(x) sum(abs(x))),
                     apply(predCount_resid,1,function(x) sum(abs(x))),
                     act,exp(apply(mu,2,median)),main=i))
   dev.off()
+  
+  #Spatial plots of random intercepts
+  lenwidRat <- dist(range(trapCoords@coords[,2]))/dist(range(trapCoords@coords[,1])) #Ratio of lat to lon (height to dist)
+  p1 <- data.frame(trapCoords@coords,intercept=apply(mod1$b0_site,2,mean)) %>% 
+    ggplot(aes(x=lon,y=lat))+
+    # geom_density_2d(colour='gray50')+
+    geom_point(aes(col=intercept,size=abs(intercept)),show.legend=c('col'=T,'size'=F))+
+    scale_colour_gradient(high='red',low='blue')+
+    labs(x='UTM Easting',y='UTM Northing',col='Site\nIntercept',title=paste(i,'distribution'))
+  ggsave(paste0('../Figures/Diagnostic Plots/',i,'_spatRanEf.png'),p1,width=10,height=10*lenwidRat)
+  
+  # png(file=paste0('../Figures/Diagnostic Plots/',i,'_spatRanEf.png'),
+  #     width=10,height=10*lenwidRat,units='in',res=100,bg = "white")
+  # plot(trapCoords@coords,cex=abs(apply(mod1$b0_site,2,mean)),pch=19,
+  #      col=c(ifelse(sign(apply(mod1$b0_site,2,mean))==-1,'red','blue')),
+  #      xlab='UTM E',ylab='UTM N',main=paste('Site-level intercept for',i)) 
+  # dev.off()
+  
+  #Graph of spatial lag
+  p2 <- data.frame(Dist=seq(0,max(distMat),length=20)*10,t(sapply(seq(0,max(distMat),length=20)^2,function(x){
+    quantile(with(mod1,(alphaDist^2)*exp(-0.5*x/(rhoDist^2))),c(0.5,0.05,0.95))
+  }))) %>% rename(lwr=X5.,med=X50.,upr=X95.) %>% 
+    ggplot(aes(Dist,med))+geom_ribbon(aes(ymax=upr,ymin=lwr),alpha=0.3)+
+    geom_line(size=1)+labs(x='Distance(km)',y='Covariance',title=paste('Spatial autocorrelation for',i))
+  ggsave(paste0('../Figures/Diagnostic Plots/',i,'_spatLag.png'),p2,width=8,height=6)
+  rm(p1,p2); gc() #Cleanup
   print(paste('Plots made for',i))
 }
 
-#Notes:
+#Notes: 
+#Bad trace for Andrena_amphibola, Andrena_thaspii, Lasioglossum_dialictus_sp5, Osmia_melanosmia
+#Separation for Overall
+#Should probably use inverse gamma prior to reduce correlation at zero distance
 
-
-
-#Bad traces for site level sigma. Could be due to poor sample size?
-#Andrena medionitens - 20
-#Osmia melanosmia - 18
-#Hylaeus sp9 - 17
-#Lasioglossum leucozonium
-
-#Marginal traces for site level sigma:
-#Anthophora occidentalis - 19
-#Dufourea maura - 12
-#Lasioglossum sp5
 
 
 #Plot of random intercepts - not really normal, so sigma2 has trouble centering.
@@ -1518,7 +1562,7 @@ p1 <- with(mod1,data.frame(canolaBloom=datalist$canolaBloom,centEndDate=round((d
 ggsave('../Figures/bloomModel.png',p1,width=8,height=6)
 
 
-# Get all main coefficients from models
+# # Get all main coefficients from models
 # getCoefs <- function(path){
 #   load(path)
 #   mod1 <- extract(modGP)

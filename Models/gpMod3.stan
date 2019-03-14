@@ -127,17 +127,12 @@ transformed parameters {
 	*/
 
 	//Site-level intercept 2015	
-	mu_site[,1]= SNLslope[1]*percSNL + //Effect of SNL ("Long-term" effect) 
-		// (b0_site[,1]-exp(pow(sigma_site[1],2)/2)); //site random intercept (centered lognormal)		
-		// (b0_site[,1]-(1/lambda_site[1])); //Centered Exp-Normal
+	mu_site[,1]= SNLslope[1]*percSNL + //Effect of SNL ("Long-term" effect) 		
 		b0_site; //Normal
 	// Site intercept 2016 = Effect of SNL + Effect of 2015 + Interaction
 	mu_site[,2]= slopeLastYear*mu_site[,1] + //Effect of last year's intercept (population)
 				SNLslope[2]*percSNL + //Effect of SNL ("year-to-year" effect)
-				slopeCanolaOverlap*siteCanolaOverlap; //Effect of canola overlap from last year
-				// (b0_site[,2]-exp(pow(sigma_site[2],2)/2)); //Site random intercept - centered lognormal				
-				// (b0_site[,2]-(1/lambda_site[2])); //Exp-Normal
-				// b0_site[,2]; //Normal
+				slopeCanolaOverlap*siteCanolaOverlap; //Effect of canola overlap from last year				
 	//Gives a "deep copy" warning if using vector directly
 		
 	/*Model for per-pass bee counts:
@@ -228,19 +223,8 @@ model {
 	
 	//Bee counts for each site - 1 for each year
 	b0 ~ normal(0,5); //Intercept for both years
-	sigma_site ~ cauchy(0,1); //Sigma for sites in 2015
-	// sigma_site[2] ~ cauchy(0,1); //Sigma for sites in 2016 - appears much smaller
-	// lambda_site ~ gamma(2,2); //Lambda for site skew
+	sigma_site ~ cauchy(0,1); //Sigma for sites in 2015	
 	b0_site ~ normal(0,sigma_site); //Random intercept for site (2015)
-	
-	// b0_site[,2] ~ normal(0,sigma_site[2]); //Random intercept for site (2016)	
-	// b0_site[,1] ~ lognormal(0,sigma_site[1]); //Random intercept for site (2015)
-	// b0_site[,2] ~ lognormal(0,sigma_site[2]); //Random intercept for site (2016)	
-	// b0_site[,1] ~ exp_mod_normal(0,sigma_site[1],lambda_site[1]); //Random intercept for site (2015)
-	// b0_site[,2] ~ exp_mod_normal(0,sigma_site[2],lambda_site[2]); //Random intercept for site (2016)	
-	// b0err ~ normal(0,b0sd);	
-	// b0sd ~ gamma(1.5,1); //Hyperprior for gamma term - non-normal random effect
-	// b0err ~ gamma(1,b0sd);	
 	
 	SNLslope ~ normal(0,3); //Prior for effect of SNL		
 	slopeLastYear ~ normal(0,1); //Effect of last year's intercept

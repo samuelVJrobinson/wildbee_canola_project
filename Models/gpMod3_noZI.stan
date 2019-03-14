@@ -1,3 +1,5 @@
+//Model 3, but without any zero-inflation process - only uses negative binomial
+
 /* Gaussian process model of bee abundance, using ZINB process for counts */
 
 functions { 
