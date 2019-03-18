@@ -28,7 +28,7 @@ load('trap.Rdata')
 trap=df3
 rm(df3)
 
-year2year=mutate(df2,year=paste0('y',year)) %>% #Traps that were used in both years
+year2year <- mutate(df2,year=paste0('y',year)) %>% #Traps that were used in both years
   group_by(year,BLID) %>%
   summarize(count=n()) %>%
   spread(year,count,fill=NA) %>%
@@ -41,7 +41,7 @@ parasitoids=c('Coelioxys','Epeolus','Holcopasites','Melecta','Nomada','Sphecodes
 #Agricultural bees
 agricultural=c('Apis mellifera','Megachile rotundata')
 
-df2=df2 %>%
+df2 <- df2 %>%
   mutate_at(vars(family:species),funs(as.character)) %>% #Convert to character
   mutate_at(vars(family:species),funs(sub(' ','',.))) %>% #Strips white space
   mutate_at(vars(family:species),funs(sub('Megachildae','Megachilidae',.))) %>% #Fixes spelling
@@ -137,10 +137,10 @@ trap=bind_rows(temp2015,temp2016) %>%
 rm(temp2015,temp2016)
 
 #Landscape variables of interest (percent cover), at radii of 100,250,500m
-landscape=landscape %>%
+landscape <- landscape %>%
   select(BLID,contains('Canola',ignore.case=T),contains('Forest'),
          contains('Shrubland'),contains('Grassland'),contains('Pasture')) %>%
-  select(BLID,contains('100m'),contains('250m'),contains('500m')) %>%
+  # select(BLID,contains('100m'),contains('250m'),contains('500m')) %>%
   select(BLID,contains('2015'),contains('2016')) %>%
   gather('class','area',-1) %>%
   separate(class,c('class','year','radius')) %>%
@@ -248,7 +248,6 @@ fastPairs <- function(l){ #List l
     par(usr=c(0,1,0,1))
     text(0.5, 0.5, round(cor(x,y),2), cex = 1 * exp(abs(cor(x,y))))})
 }
-
 #Fix names of morphospecies (if subgenus listed) 
 #eg. "Lasioglossum dialictus_sp17" -> "Lasioglossum (Dialictus) spp.17"
 #eg. "Lasioglossum_dialictus_sp17" -> "Lasioglossum (Dialictus) spp.17"
@@ -265,6 +264,13 @@ fixNames <- function(a){
   pt2 <- paste0(toupper(substr(pt2,0,1)),substr(pt2,2,nchar(pt2))) #Capitalize subgenus name
   pt3 <- paste0('spp.',substr(pt3,3,nchar(pt3))) #Add spp. to pt3
   return(paste0(pt1,' (',pt2,') ',pt3)) #Paste parts 1-3 together
+}
+#Posterior p-values (percent overlapping zero)
+postP <- function(a){
+  upr <- sum(mod1$SNLslope[,1]>0)/length(a)
+  lwr <- sum(mod1$SNLslope[,1]<0)/length(a)
+  both <- c(upr,lwr); names(both) <- c('upr','lwr')
+  return(both)
 }
 
 
@@ -1370,7 +1376,7 @@ inits <- function() { with(datalist,
 # 
 #Run Overall model
 datalist$count <- rowSums(temp[,c(9:96)]) #Sum all of bee spp
-modGP <- stan(file='gpMod3_spatial.stan',data=datalist,iter=2000,chains=3,control=list(adapt_delta=0.85),init=inits)
+modGP <- stan(file='gpMod3_spatial.stan',data=datalist,iter=3000,chains=3,control=list(adapt_delta=0.85),init=inits)
 save(modGP,file='Overall.Rdata')
 
 #Run model for top 20 bees
@@ -1389,7 +1395,7 @@ pars <- c('rho','alpha','b0','rhoDist','alphaDist','SNLslope','slopeLastYear','s
 for(i in c(wildSpp$pathName[1:20],'Overall')){
   load(paste0(i,'.Rdata'))
   p1 <- stan_hist(modGP,pars=pars)+labs(title=i)+geom_vline(xintercept=0,linetype='dashed') #Posterior distribution
-  ggsave(paste0('../Figures/Diagnostic Plots/',i,'_dist.png'),p1,width=12,height=8)
+  ggsave(paste0('../Figures/Diagnostic Plots/',i,'_dist.png'),p1,width=14,height=8)
   p2 <- traceplot(modGP,pars=pars) #Traceplot
   ggsave(paste0('../Figures/Diagnostic Plots/',i,'_trace.png'),p2,width=12,height=8)
   mod1 <- extract(modGP)
@@ -1437,7 +1443,6 @@ for(i in c(wildSpp$pathName[1:20],'Overall')){
 #Bad trace for Andrena_amphibola, Andrena_thaspii, Lasioglossum_dialictus_sp5, Osmia_melanosmia
 #Separation for Overall
 #Should probably use inverse gamma prior to reduce correlation at zero distance
-
 
 
 #Plot of random intercepts - not really normal, so sigma2 has trouble centering.
@@ -1506,19 +1511,17 @@ for(i in c(wildSpp$pathName[1:20],'Overall')){
   #Working residuals: (actual-expected)/expected
   workRes <- (act/apply(with(mod1,exp(mu)*(1-thetaZI[,datalist$year])),2,median))-1 #Expected value
   #Marginalized effects from Y1
-  margY1 <- 
-    
-  mod1$SNLslope[,1]*mean(datalist$percSNL)+
-    
-      apply(mod1$predCanolaPass[,datalist$year==1],2,mean)
+  margY1 <- median(mod1$b0[,1]) + #Intercept
+    median(mean(datalist$percSNL)*mod1$SNLslope[,1]) + #SNL effect
+    median(mod1$canolaEffect[,1] * mean(mod1$predCanolaPass[,datalist$year==1])) #Canola per pass
   
-  plot(apply(mod1$predCanolaPass[,datalist$year==1],2,mean))
-  
-  
+  margY2 <- median(mod1$b0[,2]) + #Intercept
+    median(mean(datalist$percSNL)*mod1$SNLslope[,2]) + #SNL effect
+    median(mod1$canolaEffect[,2] * mean(mod1$predCanolaPass[,datalist$year==2])) #Canola per pass
   
   #GP trend for each year
-  y1 <- with(datalist,t(apply(mod1$gpTrend2015+mod1$b0[,1],2,function(x) quantile(x,c(0.05,0.5,0.95))))[dateIndex2015,c(1:3)])
-  y2 <- with(datalist,t(apply(mod1$gpTrend2016+mod1$b0[,2],2,function(x) quantile(x,c(0.05,0.5,0.95))))[dateIndex2016,c(1:3)])
+  y1 <- with(datalist,t(apply(mod1$gpTrend2015+margY1,2,function(x) quantile(x,c(0.05,0.5,0.95))))[dateIndex2015,c(1:3)])
+  y2 <- with(datalist,t(apply(mod1$gpTrend2016+margY2,2,function(x) quantile(x,c(0.05,0.5,0.95))))[dateIndex2016,c(1:3)])
   
   #Assemble GP trend along with dates, year, residual
   gpResTemp <- with(datalist,data.frame(rbind(y1,y2),day=c(centDates2015[dateIndex2015],centDates2016[dateIndex2016]),
@@ -1536,9 +1539,11 @@ p1 <- gpResAll %>% mutate_at(vars(lwr:upr),exp) %>%
   mutate(resid=med+(resid*med)) %>% 
   mutate(year=factor(year)) %>%
   mutate(spp=factor(spp,levels=c('Overall',wildSpp$pathName),labels=c('Overall',wildSpp$labelName))) %>% 
+  group_by(spp) %>% filter(resid<=quantile(resid,0.97)) %>%
   ggplot(aes(day,group=year))+geom_ribbon(aes(ymax=upr,ymin=lwr,fill=year),alpha=0.3,show.legend=F)+
-  geom_line(aes(y=med,col=year),size=1) + geom_point(aes(y=resid,col=year),alpha=0.5,size=0.75) + 
+  geom_line(aes(y=med,col=year),size=1) + 
   facet_wrap(~spp,scales='free_y')+labs(y='Counts per week',x='Day of year',col='Year',main=i)+
+  geom_point(aes(y=resid,col=year),alpha=0.5,size=0.75) +
   scale_colour_manual(values=c('red','blue'))+scale_fill_manual(values=c('red','blue'))+
   theme(strip.text=element_text(size=9),axis.text=element_text(size=12))+
   theme(legend.position=c(0.9,0.05),legend.background=element_rect(fill='white',colour='black',linetype='solid'),
@@ -1600,7 +1605,7 @@ coefs <- coefs %>% mutate(spp=as.character(spp)) %>%
   # filter(param!='SNLslope1') %>% #Strip out SNL slopes from year 1
   mutate(param=factor(param,levels=c('SNLslope1','SNLslope2','slopeLastYear','slopeCanolaOverlap'),
                       labels=c('Semi-natural → Counts 2015','Semi-natural → Counts 2016',
-                                     'Counts 2015 → Counts 2016 ','Canola Overlap 2015 → Counts 2016')))
+                                     'Counts 2015 → Counts 2016 ','Canola Overlap 2015\n→ Counts 2016')))
 
 nameOrder <- coefs %>% select(spp,family) %>% distinct() %>% 
   mutate(family=factor(family,levels=c("Overall","Andrenidae","Apidae","Colletidae","Halictidae","Megachilidae"))) %>%
@@ -1651,13 +1656,13 @@ ggsave('../Figures/coef_estimates.png',p1,width=11,height=8.5)
 #Plots of canola attractiveness across spp.
 setwd("~/Projects/UofC/wildbee_canola_project/Models")
 
-#Get per-pass canola coefficients from models
+# # Get intercepts and per-pass canola coefficients from models
 # getCoefs <- function(path){
 #   load(path)
 #   mod1 <- extract(modGP)
 #   a <- data.frame(spp=sub('.Rdata','',path),
-#                   par=c('canolaEffect1','canolaEffect2'),
-#                   meas=rbind(t(apply(mod1$canolaEffect,2,function(x) 
+#                   par=c('canolaEffect1','canolaEffect2','b0_2015','b0_2016'),
+#                   meas=rbind(t(apply(cbind(mod1$canolaEffect,mod1$b0),2,function(x)
 #                     quantile(x,c(0.025,0.25,0.5,0.75,0.975))))))
 #   names(a)[3:7] <- c('lwr2','lwr1','med','upr1','upr2')
 #   rm(mod1,modGP); gc()
@@ -1686,7 +1691,7 @@ coefs <- coefs %>% mutate(spp=as.character(spp)) %>%
   mutate(param=as.character(par)) %>% select(-par) %>% 
   # mutate(lwr2=ifelse(lwr2>-10,lwr2,-10)) %>% #Trim limits of x-axis
   # filter(param!='SNLslope1') %>% #Strip out SNL slopes from year 1
-  mutate(param=factor(param,labels=c('Canola Abundance 2015 → Counts 2015','Canola Abundance 2016 → Counts 2016')))
+  mutate(param=factor(param,labels=c('Intercept 2015','Intercept 2016','Canola Abundance 2015\n→ Counts 2015','Canola Abundance 2016\n→ Counts 2016')))
 
 nameOrder <- coefs %>% select(spp,family) %>% distinct() %>% 
   mutate(family=factor(family,levels=c("Overall","Andrenidae","Apidae","Colletidae","Halictidae","Megachilidae"))) %>%
@@ -1714,13 +1719,14 @@ rm(rectParams1,rectParams2)
 
 #Parameters for text labels
 textParams <- rectParams %>% rowwise() %>% 
-  mutate(x=mean(xmax,xmin)-abs(xmax-xmin)*0.99,y=mean(ymax,ymin)-abs(ymax-ymin)*0.5) %>% 
-  mutate(x=ifelse(family=='Colletidae',1,x)) %>% 
+  mutate(x=mean(c(xmax,xmin))-abs(xmax-xmin)*.45,y=mean(ymax,ymin)-abs(ymax-ymin)*0.5) %>% 
+  mutate(x=ifelse(family=='Colletidae',-0.5,x)) %>%
   select(-ymax,-ymin,-xmax,-xmin) %>% 
-  mutate(family=as.character(family),keep=param=='Canola Abundance 2015 → Counts 2015'&family!='Overall') %>% 
+  mutate(family=as.character(family),keep=param=='Intercept 2015'&family!='Overall') %>% 
   mutate(family=ifelse(keep,family,NA),x=ifelse(keep,x,NA),y=ifelse(keep,y,NA)) %>% select(-keep) 
 
-p1 <- coefs %>% mutate(spp=factor(spp,levels=nameOrder$spp)) %>% rowwise() %>% 
+p1 <-
+  coefs %>% mutate(spp=factor(spp,levels=nameOrder$spp)) %>% rowwise() %>% 
   ggplot(aes(x=med,y=spp))+
   facet_wrap(~param,scales='free_x',ncol=4)+
   geom_rect(data=rectParams,aes(x=NULL,y=NULL,xmin=xmin,xmax=xmax,ymin=ymin+0.5,ymax=ymax+0.5,fill=family),alpha=0.5,show.legend=F)+
@@ -1732,7 +1738,7 @@ p1 <- coefs %>% mutate(spp=factor(spp,levels=nameOrder$spp)) %>% rowwise() %>%
   geom_label(data=textParams,aes(x=x,y=y+0.5,label=family),fill='gray90',col='black',size=4,hjust='left')+
   scale_fill_manual(values=c('white','gray70','gray50','gray70','gray50','gray70'))+
   theme(axis.text.y=element_text(size=10),axis.text.x=element_text(size=10),strip.text=element_text(size=10))
-ggsave('../Figures/canolaEstimates.png',p1,width=8,height=10)
+ggsave('../Figures/canolaEstimates.png',p1,width=11,height=8.5)
 
 
 #Megachile perihirta and Osmia sp1 appear to be positively & negatively (respectively) affected by adjacent canola bloom in Y1 only. Check that these parameters aren't correlated with other ones. No super obvious correlations for M.p. 
