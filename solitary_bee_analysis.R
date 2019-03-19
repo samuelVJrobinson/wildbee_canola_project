@@ -244,7 +244,7 @@ PPplots <- function(resid,predResid,actual,pred,main=NULL){
 }
 #Faster pair plots, using extracted lists
 fastPairs <- function(l){ #List l
-  pairs(l,lower.panel=function(x,y){
+  pairs(l,gap=0,lower.panel=function(x,y){
     par(usr=c(0,1,0,1))
     text(0.5, 0.5, round(cor(x,y),2), cex = 1 * exp(abs(cor(x,y))))})
 }
@@ -1370,72 +1370,69 @@ inits <- function() { with(datalist,
    ))
 }
 
-# with(datalist,data.frame(dates=centDate,count,year,site)) %>% 
-#   ggplot(aes(dates,count))+geom_point()+geom_line(aes(group=site))+facet_wrap(~year)+
-#   scale_y_log10()
+# #Run Overall model
+# datalist$count <- rowSums(temp[,c(9:96)]) #Sum all of bee spp
+# modGP <- stan(file='gpMod3_spatial.stan',data=datalist,iter=3000,chains=3,control=list(adapt_delta=0.85),init=inits)
+# save(modGP,file='Overall.Rdata')
 # 
-#Run Overall model
-datalist$count <- rowSums(temp[,c(9:96)]) #Sum all of bee spp
-modGP <- stan(file='gpMod3_spatial.stan',data=datalist,iter=3000,chains=3,control=list(adapt_delta=0.85),init=inits)
-save(modGP,file='Overall.Rdata')
+# #Run model for top 20 bees
+# for(i in wildSpp$pathName[c(1:20)]){
+#   datalist$count <- temp[,i] 
+#   modGP <- stan(file='gpMod3_spatial.stan',data=datalist,iter=2000,chains=3,control=list(adapt_delta=0.85),init=inits)
+#   
+#   save(modGP,file=paste0(i,'.Rdata'))
+#   print(paste('Finished',i))
+# }
 
-#Run model for top 20 bees
-for(i in wildSpp$pathName[c(1:20)]){
-  datalist$count <- temp[,i] 
-  modGP <- stan(file='gpMod3_spatial.stan',data=datalist,iter=2000,chains=3,control=list(adapt_delta=0.85),init=inits)
-  
-  save(modGP,file=paste0(i,'.Rdata'))
-  print(paste('Finished',i))
-}
-
+#Parameters of interest
 pars <- c('rho','alpha','b0','rhoDist','alphaDist','SNLslope','slopeLastYear','slopeCanolaOverlap','canolaEffect','phi','thetaZI')
 # pars=c('muCanola','sigmaCanola','ampCanola','residCanola') #OK
 
 #Make basic diagnostic plots for each model
 for(i in c(wildSpp$pathName[1:20],'Overall')){
   load(paste0(i,'.Rdata'))
-  p1 <- stan_hist(modGP,pars=pars)+labs(title=i)+geom_vline(xintercept=0,linetype='dashed') #Posterior distribution
-  ggsave(paste0('../Figures/Diagnostic Plots/',i,'_dist.png'),p1,width=14,height=8)
-  p2 <- traceplot(modGP,pars=pars) #Traceplot
-  ggsave(paste0('../Figures/Diagnostic Plots/',i,'_trace.png'),p2,width=12,height=8)
+  # p1 <- stan_hist(modGP,pars=pars)+labs(title=i)+geom_vline(xintercept=0,linetype='dashed') #Posterior distribution
+  # ggsave(paste0('../Figures/Diagnostic Plots/',i,'_dist.png'),p1,width=14,height=8)
+  # p2 <- traceplot(modGP,pars=pars) #Traceplot
+  # ggsave(paste0('../Figures/Diagnostic Plots/',i,'_trace.png'),p2,width=12,height=8)
   mod1 <- extract(modGP)
-  
-  #Actual counts
-  if(i=='Overall') act <- rowSums(temp[,c(9:96)]) else act <- temp[,i]
-
-  #PP plots
-  png(file =paste0('../Figures/Diagnostic Plots/',i,'_PP.png'),
-      width=6,height=12,units='in',res=100,bg = "white")
-  with(mod1,PPplots(apply(count_resid,1,function(x) sum(abs(x))),
-                    apply(predCount_resid,1,function(x) sum(abs(x))),
-                    act,exp(apply(mu,2,median)),main=i))
+  #Correlation among posterior estimates
+  png(file =paste0('../Figures/Diagnostic Plots/',i,'_postCor.png'),
+      width=16,height=9,units='in',res=150,bg = "white")
+  fastPairs(mod1[pars])
   dev.off()
   
-  #Spatial plots of random intercepts
-  lenwidRat <- dist(range(trapCoords@coords[,2]))/dist(range(trapCoords@coords[,1])) #Ratio of lat to lon (height to dist)
-  p1 <- data.frame(trapCoords@coords,intercept=apply(mod1$b0_site,2,mean)) %>% 
-    ggplot(aes(x=lon,y=lat))+
-    # geom_density_2d(colour='gray50')+
-    geom_point(aes(col=intercept,size=abs(intercept)),show.legend=c('col'=T,'size'=F))+
-    scale_colour_gradient(high='red',low='blue')+
-    labs(x='UTM Easting',y='UTM Northing',col='Site\nIntercept',title=paste(i,'distribution'))
-  ggsave(paste0('../Figures/Diagnostic Plots/',i,'_spatRanEf.png'),p1,width=10,height=10*lenwidRat)
-  
-  # png(file=paste0('../Figures/Diagnostic Plots/',i,'_spatRanEf.png'),
-  #     width=10,height=10*lenwidRat,units='in',res=100,bg = "white")
-  # plot(trapCoords@coords,cex=abs(apply(mod1$b0_site,2,mean)),pch=19,
-  #      col=c(ifelse(sign(apply(mod1$b0_site,2,mean))==-1,'red','blue')),
-  #      xlab='UTM E',ylab='UTM N',main=paste('Site-level intercept for',i)) 
+  # #Actual counts
+  # if(i=='Overall') act <- rowSums(temp[,c(9:96)]) else act <- temp[,i]
+  # 
+  # #PP plots
+  # png(file =paste0('../Figures/Diagnostic Plots/',i,'_PP.png'),
+  #     width=6,height=12,units='in',res=100,bg = "white")
+  # with(mod1,PPplots(apply(count_resid,1,function(x) sum(abs(x))),
+  #                   apply(predCount_resid,1,function(x) sum(abs(x))),
+  #                   act,exp(apply(mu,2,median)),main=i))
   # dev.off()
+  # 
+  # #Spatial plots of random intercepts
+  # lenwidRat <- dist(range(trapCoords@coords[,2]))/dist(range(trapCoords@coords[,1])) #Ratio of lat to lon (height to dist)
+  # p1 <- data.frame(trapCoords@coords,intercept=apply(mod1$b0_site,2,mean)) %>% 
+  #   ggplot(aes(x=lon,y=lat))+
+  #   # geom_density_2d(colour='gray50')+
+  #   geom_point(aes(col=intercept,size=abs(intercept)),show.legend=c('col'=T,'size'=F))+
+  #   scale_colour_gradient(high='red',low='blue')+
+  #   labs(x='UTM Easting',y='UTM Northing',col='Site\nIntercept',title=paste(i,'distribution'))
+  # ggsave(paste0('../Figures/Diagnostic Plots/',i,'_spatRanEf.png'),p1,width=10,height=10*lenwidRat)
   
-  #Graph of spatial lag
-  p2 <- data.frame(Dist=seq(0,max(distMat),length=20)*10,t(sapply(seq(0,max(distMat),length=20)^2,function(x){
-    quantile(with(mod1,(alphaDist^2)*exp(-0.5*x/(rhoDist^2))),c(0.5,0.05,0.95))
-  }))) %>% rename(lwr=X5.,med=X50.,upr=X95.) %>% 
-    ggplot(aes(Dist,med))+geom_ribbon(aes(ymax=upr,ymin=lwr),alpha=0.3)+
-    geom_line(size=1)+labs(x='Distance(km)',y='Covariance',title=paste('Spatial autocorrelation for',i))
-  ggsave(paste0('../Figures/Diagnostic Plots/',i,'_spatLag.png'),p2,width=8,height=6)
-  rm(p1,p2); gc() #Cleanup
+  # #Graph of spatial lag
+  # p2 <- data.frame(Dist=seq(0,max(distMat),length=20)*10,t(sapply(seq(0,max(distMat),length=20)^2,function(x){
+  #   quantile(with(mod1,(alphaDist^2)*exp(-0.5*x/(rhoDist^2))),c(0.5,0.05,0.95))
+  # }))) %>% rename(lwr=X5.,med=X50.,upr=X95.) %>% 
+  #   ggplot(aes(Dist,med))+geom_ribbon(aes(ymax=upr,ymin=lwr),alpha=0.3)+
+  #   geom_line(size=1)+labs(x='Distance(km)',y='Covariance',title=paste('Spatial autocorrelation for',i))
+  # ggsave(paste0('../Figures/Diagnostic Plots/',i,'_spatLag.png'),p2,width=8,height=6)
+  
+  #Cleanup
+  rm(p1,p2,modGP,mod1); gc() 
   print(paste('Plots made for',i))
 }
 
