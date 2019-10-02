@@ -151,7 +151,7 @@ transformed parameters {
 	siteCanolaLims[2,]=invGaus(10,muDateCanola[2],sigmaDateCanola[2],100)'; // Year 2
 	
 	for(i in 1:N){			  					
-		//Calculate canola overlap for pass = proportion canola nearby x %bloom / traplength
+		//Calculate canola overlap for pass = proportion canola nearby x days over 10% bloom / traplength = 
 		predCanolaPass[i]= percCanola[site[i],1]*max([min([siteCanolaLims[year[i],1],centEndDate[i]])-max([siteCanolaLims[year[i],2],centEndDate[i]-traplength[i]]),0])/traplength[i]; 				
 		//Add overlap to siteCanolaOverlap if year == 2015
 		if(year[i]==1){
@@ -264,14 +264,14 @@ model {
 	bernLL[2,2]=bernoulli_lpmf(1|thetaZI[2]); //LL of extra zero
 	//Calculate LL for negbin process + LL of no extra zero
 	for(i in 1:N){
-		totalLL[i] = neg_binomial_2_log_lpmf(count[i]|mu[i],phiVector[i]);
+		totalLL[i] = neg_binomial_2_log_lpmf(count[i]|mu[i],phiVector[i]); //LL of NB process
 	}	
-	totalLL[1:NperYear[1]] = totalLL[1:NperYear[1]] + rep_vector(bernLL[1,1],NperYear[1]);
-	totalLL[NperYear[1]+1:N] = totalLL[NperYear[1]+1:N] + rep_vector(bernLL[1,2],NperYear[2]);
+	totalLL[1:NperYear[1]] = totalLL[1:NperYear[1]] + rep_vector(bernLL[1,1],NperYear[1]); //LL of NB process + LL no extra zero
+	totalLL[NperYear[1]+1:N] = totalLL[NperYear[1]+1:N] + rep_vector(bernLL[1,2],NperYear[2]); 
 	
 	for(i in 1:N){	
-		if(count[i]==0)
-			totalLL[i] = log_sum_exp(totalLL[i],bernLL[2,year[i]]);						 
+		if(count[i]==0) //If a zero is observed
+			totalLL[i] = log_sum_exp(totalLL[i],bernLL[2,year[i]]); //LL of seeing a zero is LL of NB zero, plus LL of extra zero 
 	}	
 	target += sum(totalLL); //Increment LL	
 	
